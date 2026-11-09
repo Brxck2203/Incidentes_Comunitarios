@@ -1,20 +1,16 @@
-import { Link, Outlet } from 'react-router-dom';
+import { Link, NavLink, Outlet } from 'react-router-dom';
 
 export default function MainLayout() {
-  return (
-    <>
-      <a className="skip-link" href="#contenido">Saltar al contenido</a>
-      <header className="site-header">
-        <Link className="brand" to="/">Reporte Ciudadano</Link>
-        <span className="prototype-label">Prototipo académico</span>
-      </header>
-      <main id="contenido" className="page-container" tabIndex={-1}>
-        <Outlet />
-      </main>
-      <footer className="site-footer">
-        <p>IC-5821 · Requerimientos de Software · Grupo 50</p>
-        <p>Demostración sin conexión con servicios municipales.</p>
-      </footer>
-    </>
-  );
+  return <>
+    <a className="skip-link" href="#contenido">Saltar al contenido</a>
+    <header className="site-header">
+      <Link className="brand" to="/">Reporte Ciudadano</Link>
+      <nav aria-label="Navegación principal">
+        <NavLink to="/" end>Reportar</NavLink>
+        <NavLink to="/reportes">Mis reportes</NavLink>
+        <NavLink to="/recepcion">Recepción</NavLink>
+      </nav>
+    </header>
+    <main id="contenido" className="page-container" tabIndex={-1}><Outlet /></main>
+  </>;
 }
