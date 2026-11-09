@@ -1,0 +1,24 @@
+#root { min-height: 100dvh; display: flex; flex-direction: column; }
+.site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 1rem max(1rem, calc((100% - 1120px) / 2));
+  background: #ffffff;
+  border-bottom: 1px solid #cbd5e1;
+}
+.brand { font-size: 1.25rem; font-weight: 750; text-decoration: none; }
+.prototype-label { padding: 0.25rem 0.75rem; border-radius: 2rem; background: #e4edf7; color: #234462; }
+.page-container { width: min(100% - 2rem, 1120px); margin: 0 auto; padding: 3rem 0; flex: 1; }
+.welcome-panel { max-width: 850px; }
+.eyebrow { color: #344e68; font-weight: 650; }
+.lead { max-width: 65ch; font-size: 1.15rem; }
+.notice { margin-top: 2rem; padding: 1.5rem; background: #fff; border: 1px solid #cbd5e1; border-left: 5px solid #124c85; border-radius: 0.5rem; }
+.notice h2 { margin-top: 0; }
+.safety-note { color: #633c12; }
+.site-footer { padding: 1rem; border-top: 1px solid #cbd5e1; text-align: center; background: #fff; }
+.site-footer p { margin: 0.25rem 0; }
+.skip-link { position: absolute; left: 1rem; top: -10rem; padding: 0.75rem; background: white; z-index: 10; }
+.skip-link:focus { top: 1rem; }
