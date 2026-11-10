@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 
-export default function useAudioRecorder() {
+export default function useAudioRecorder({ onTimeout } = {}) {
   const recorder = useRef(null);
   const stream = useRef(null);
   const timer = useRef(null);
   const pending = useRef(null);
   const alive = useRef(true);
+  const timedOut = useRef(false);
+  const onTimeoutRef = useRef(onTimeout);
+  useEffect(() => { onTimeoutRef.current = onTimeout; }, [onTimeout]);
   const [audio, setAudio] = useState(null);
   const [recording, setRecording] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -45,8 +48,13 @@ export default function useAudioRecorder() {
           clearInterval(timer.current);
           media.getTracks().forEach((track) => track.stop());
           const blob = new Blob(chunks, { type: instance.mimeType });
-          if (alive.current) { setAudio(blob.size ? blob : null); setRecording(false); }
-          resolve(blob.size ? blob : null);
+          const finalAudio = blob.size ? blob : null;
+          if (alive.current) { setAudio(finalAudio); setRecording(false); }
+          resolve(finalAudio);
+          if (timedOut.current) {
+            timedOut.current = false;
+            onTimeoutRef.current?.(finalAudio);
+          }
         };
         instance.onerror = () => {
           clearInterval(timer.current);
@@ -55,12 +63,16 @@ export default function useAudioRecorder() {
           resolve(null);
         };
       });
+      timedOut.current = false;
       instance.start(); setRecording(true); setSeconds(60);
       const deadline = Date.now() + 60000;
       timer.current = setInterval(() => {
         const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
         if (alive.current) setSeconds(remaining);
-        if (!remaining && instance.state === 'recording') instance.stop();
+        if (!remaining && instance.state === 'recording') {
+          timedOut.current = true;
+          instance.stop();
+        }
       }, 100);
     } catch (failure) {
       stream.current?.getTracks().forEach((track) => track.stop());
