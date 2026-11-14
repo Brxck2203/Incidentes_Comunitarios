@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { categories, getReport, complementReport, validatePhotos } from '../services/reportRepository.js';
+import { categories, complementReport, validatePhotos } from '../services/reportRepository.js';
+import { getConsolidatedTrackingForTicket } from '../services/consolidatedTracking.js';
+import JointAttentionPanel from '../components/JointAttentionPanel.jsx';
 import Evidence from '../components/Evidence.jsx';
 import LocationMap from '../components/LocationMap.jsx';
 
@@ -8,6 +10,7 @@ export default function ReportDetailPage() {
   const { ticket } = useParams();
   const location = useLocation();
   const [report, setReport] = useState(null);
+  const [tracking, setTracking] = useState(null);
   const [draft, setDraft] = useState(null);
   const [photos, setPhotos] = useState([]);
   const [editing, setEditing] = useState(false);
@@ -17,11 +20,21 @@ export default function ReportDetailPage() {
   const [message, setMessage] = useState('');
   useEffect(() => {
     let active = true;
-    setLoading(true); setError(''); setEditing(false); setReport(null); setMessage(''); setPhotos([]);
-    getReport(ticket).then((value) => { if (active) setReport(value); })
-      .catch((failure) => { if (active) setError(failure.message); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
+    setLoading(true); setError(''); setEditing(false); setReport(null); setTracking(null); setMessage(''); setPhotos([]);
+    function loadDetail() {
+      getConsolidatedTrackingForTicket(ticket)
+        .then(({ report: loadedReport, tracking: loadedTracking }) => {
+          if (active) {
+            setReport(loadedReport);
+            setTracking(loadedTracking);
+          }
+        })
+        .catch((failure) => { if (active) setError(failure.message); })
+        .finally(() => { if (active) setLoading(false); });
+    }
+    loadDetail();
+    window.addEventListener('focus', loadDetail);
+    return () => { active = false; window.removeEventListener('focus', loadDetail); };
   }, [ticket]);
   function field(name, value) { setDraft((current) => ({ ...current, [name]: value })); }
   async function save(event) {
@@ -29,22 +42,30 @@ export default function ReportDetailPage() {
     if (busy) return;
     setBusy(true); setError(''); setMessage('');
     try {
-      const updated = await complementReport(ticket, draft, photos);
-      setReport(updated); setEditing(false); setPhotos([]); setMessage('Cambios guardados.');
+      await complementReport(ticket, draft, photos);
+      const { report: refreshedReport, tracking: refreshedTracking } = await getConsolidatedTrackingForTicket(ticket);
+      setReport(refreshedReport);
+      setTracking(refreshedTracking);
+      setEditing(false);
+      setPhotos([]);
+      setMessage('Cambios guardados.');
     } catch (failure) { setError(failure.message); }
     finally { setBusy(false); }
   }
   if (loading) return <p role="status">Cargando reporte…</p>;
   if (!report) return <section><h1>Reporte no disponible</h1><p role="alert">{error || 'No se encontró el ticket solicitado.'}</p><Link to="/reportes">Volver a mis reportes</Link></section>;
+  const effectiveStatus = tracking?.effectiveStatus ?? report.status;
+  const effectiveUpdatedAt = tracking?.effectiveUpdatedAt ?? report.updatedAt;
   return <section>
     <Link className="text-link" to="/reportes">Volver a mis reportes</Link>
     <h1>Detalle del reporte</h1>
     {location.state?.created && <p className="success-message" role="status">Reporte guardado. Conserva tu código de seguimiento.</p>}
     <p className="ticket">{report.ticket}</p>
-    <p>{report.status} · {new Date(report.createdAt).toLocaleString('es-CR')}</p>
-    <p>Última actualización: {new Date(report.updatedAt).toLocaleString('es-CR')}</p>
+    <p>{effectiveStatus} · {new Date(report.createdAt).toLocaleString('es-CR')}</p>
+    <p>Última actualización: {new Date(effectiveUpdatedAt).toLocaleString('es-CR')}</p>
     {error && <p className="error-message" role="alert">{error}</p>}
     {message && <p className="success-message" role="status">{message}</p>}
+    <JointAttentionPanel tracking={tracking} />
     <h2>Evidencias</h2><Evidence audio={report.audio} photos={report.photos} />
     {editing ? <form onSubmit={save}>
       <h2>Agregar más detalles</h2>

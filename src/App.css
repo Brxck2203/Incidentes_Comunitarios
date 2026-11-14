@@ -146,3 +146,91 @@ audio { width: 100%; min-height: 48px; margin-top: 1rem; }
 .text-link { display: inline-flex; align-items: center; min-height: 48px; }
 .skip-link { position: absolute; left: 1rem; top: -10rem; padding: .75rem; background: white; z-index: 10000; }
 .skip-link:focus { top: 1rem; }
+
+/* HU-09: Seguimiento ciudadano de reportes consolidados */
+.ticket-search-box {
+  max-width: 480px;
+  margin-bottom: 1.5rem;
+}
+.report-card-joint {
+  border-left: 5px solid #123f73;
+  background: #f8fbff;
+}
+.report-card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.joint-attention-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.65rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border-radius: 999px;
+  background: #123f73;
+  color: #ffffff;
+}
+.joint-attention-card-note {
+  margin: 0.35rem 0;
+  font-size: 0.95rem;
+  color: #1e3a8a;
+}
+.joint-attention-panel {
+  margin: 1.5rem 0 2rem;
+  padding: 1.25rem;
+  background: #f0f6ff;
+  border: 2px solid #123f73;
+  border-radius: 0.75rem;
+}
+.joint-attention-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.joint-attention-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: #123f73;
+}
+.joint-attention-lead {
+  margin: 0.75rem 0 1rem;
+}
+.joint-attention-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+  margin: 0 0 1.25rem;
+}
+.joint-attention-metric-card {
+  padding: 0.85rem 1rem;
+  background: #ffffff;
+  border: 1px solid #bfdbfe;
+  border-radius: 0.5rem;
+}
+.joint-attention-metric-card dt {
+  font-size: 0.85rem;
+  font-weight: 650;
+  color: #475569;
+}
+.joint-attention-metric-card dd {
+  margin: 0.2rem 0 0;
+  font-size: 1.05rem;
+  font-weight: 750;
+  color: #152b3c;
+  overflow-wrap: anywhere;
+}
+.joint-attention-panel h3 {
+  margin: 1rem 0 0.5rem;
+  font-size: 1.05rem;
+}
+.joint-attention-timeline {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+.joint-attention-timeline li {
+  margin: 0.4rem 0;
+}
