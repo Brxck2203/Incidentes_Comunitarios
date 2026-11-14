@@ -146,3 +146,195 @@ audio { width: 100%; min-height: 48px; margin-top: 1rem; }
 .text-link { display: inline-flex; align-items: center; min-height: 48px; }
 .skip-link { position: absolute; left: 1rem; top: -10rem; padding: .75rem; background: white; z-index: 10000; }
 .skip-link:focus { top: 1rem; }
+
+/* HU-08: Consolidación de casos en reporte maestro */
+.consolidation-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 1rem 0 1.25rem;
+  padding: 1rem 1.25rem;
+  background: #ffffff;
+  border: 1px solid #94a3b8;
+  border-radius: 0.75rem;
+}
+.consolidation-toolbar-status {
+  margin: 0;
+  font-weight: 600;
+}
+.consolidation-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.report-card-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.report-select-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  min-height: 48px;
+  cursor: pointer;
+  font-weight: 650;
+}
+.report-select-checkbox input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  min-height: 22px;
+  margin: 0;
+  cursor: pointer;
+}
+.report-card-master {
+  border-left: 5px solid #123f73;
+}
+.report-card-secondary {
+  background: #f8fafc;
+}
+.consolidation-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.65rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border-radius: 999px;
+}
+.consolidation-status-badge.master-badge {
+  background: #123f73;
+  color: #ffffff;
+}
+.consolidation-status-badge.secondary-badge {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+.consolidation-modal-panel {
+  margin: 1.25rem 0 1.75rem;
+  padding: 1.5rem;
+  background: #ffffff;
+  border: 2px solid #123f73;
+  border-radius: 0.85rem;
+}
+.consolidation-modal-panel h2 {
+  margin-top: 0;
+}
+.consolidation-fieldset {
+  border: 1px solid #cbd5e1;
+  border-radius: 0.65rem;
+  padding: 1rem;
+  margin: 1rem 0;
+}
+.consolidation-fieldset legend {
+  font-weight: 700;
+  padding: 0 0.4rem;
+}
+.consolidation-candidate-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+.consolidation-candidate-item {
+  padding: 0.75rem 1rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  background: #f8fafc;
+}
+.consolidation-candidate-item.selected-master {
+  border-color: #123f73;
+  background: #f0f6ff;
+}
+.consolidation-radio-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin: 0;
+  cursor: pointer;
+  font-weight: normal;
+}
+.consolidation-radio-label input[type="radio"] {
+  width: 22px;
+  height: 22px;
+  min-height: 22px;
+  margin-top: 0.2rem;
+}
+.consolidation-candidate-info p {
+  margin: 0.2rem 0 0;
+}
+.consolidation-role-pill {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #1e293b;
+}
+.selected-master .consolidation-role-pill {
+  background: #123f73;
+  color: #ffffff;
+}
+.consolidation-oldest-hint {
+  font-size: 0.85rem;
+  color: #334155;
+  font-weight: 600;
+}
+.consolidation-evidence-summary {
+  font-size: 0.9rem;
+  color: #475569;
+}
+.consolidated-evidence-section {
+  margin: 2rem 0;
+  padding: 1.25rem;
+  background: #f0f6ff;
+  border: 1px solid #93c5fd;
+  border-radius: 0.75rem;
+}
+.consolidated-section-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.consolidated-section-header h2 {
+  margin: 0;
+}
+.merged-evidence-list {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.merged-evidence-card {
+  padding: 1rem;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-left: 4px solid #123f73;
+  border-radius: 0.5rem;
+}
+.merged-evidence-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.merged-evidence-card-header p {
+  margin: 0;
+}
+.merged-evidence-meta {
+  font-size: 0.9rem;
+  color: #475569;
+}
+.consolidated-secondary-banner {
+  padding: 1rem;
+  background: #f0f6ff;
+  border-left: 4px solid #123f73;
+  border-radius: 0.4rem;
+}

@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { categories, getReport, complementReport, validatePhotos } from '../services/reportRepository.js';
+import ConsolidatedEvidenceSection from '../components/ConsolidatedEvidenceSection.jsx';
 import Evidence from '../components/Evidence.jsx';
 import LocationMap from '../components/LocationMap.jsx';
 
 export default function ReportDetailPage() {
   const { ticket } = useParams();
   const location = useLocation();
+  const fromReception = Boolean(location.state?.fromReception);
   const [report, setReport] = useState(null);
   const [draft, setDraft] = useState(null);
   const [photos, setPhotos] = useState([]);
@@ -35,17 +37,29 @@ export default function ReportDetailPage() {
     finally { setBusy(false); }
   }
   if (loading) return <p role="status">Cargando reporte…</p>;
-  if (!report) return <section><h1>Reporte no disponible</h1><p role="alert">{error || 'No se encontró el ticket solicitado.'}</p><Link to="/reportes">Volver a mis reportes</Link></section>;
+  if (!report) return <section><h1>Reporte no disponible</h1><p role="alert">{error || 'No se encontró el ticket solicitado.'}</p><Link to={fromReception ? '/recepcion' : '/reportes'}>{fromReception ? 'Volver a recepción de reportes' : 'Volver a mis reportes'}</Link></section>;
   return <section>
-    <Link className="text-link" to="/reportes">Volver a mis reportes</Link>
+    <Link className="text-link" to={fromReception ? '/recepcion' : '/reportes'}>
+      {fromReception ? 'Volver a recepción de reportes' : 'Volver a mis reportes'}
+    </Link>
     <h1>Detalle del reporte</h1>
     {location.state?.created && <p className="success-message" role="status">Reporte guardado. Conserva tu código de seguimiento.</p>}
     <p className="ticket">{report.ticket}</p>
     <p>{report.status} · {new Date(report.createdAt).toLocaleString('es-CR')}</p>
     <p>Última actualización: {new Date(report.updatedAt).toLocaleString('es-CR')}</p>
+    {report.masterTicket && (
+      <p className="consolidated-secondary-banner" role="status">
+        Este reporte está enlazado como solicitud secundaria al expediente principal{' '}
+        <Link to={`/reportes/${report.masterTicket}`} state={{ fromReception }}>
+          <strong>{report.masterTicket}</strong>
+        </Link>
+        .
+      </p>
+    )}
     {error && <p className="error-message" role="alert">{error}</p>}
     {message && <p className="success-message" role="status">{message}</p>}
     <h2>Evidencias</h2><Evidence audio={report.audio} photos={report.photos} />
+    <ConsolidatedEvidenceSection report={report} />
     {editing ? <form onSubmit={save}>
       <h2>Agregar más detalles</h2>
       <label>Categoría<select value={draft.category} onChange={(event) => field('category', event.target.value)} disabled={busy}>
