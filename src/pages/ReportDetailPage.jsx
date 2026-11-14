@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { categories, getReport, complementReport, validatePhotos } from '../services/reportRepository.js';
+import { detectDuplicatesForTicket } from '../services/duplicateDetection.js';
+import DuplicateComparisonPanel from '../components/DuplicateComparisonPanel.jsx';
 import Evidence from '../components/Evidence.jsx';
 import LocationMap from '../components/LocationMap.jsx';
 
 export default function ReportDetailPage() {
   const { ticket } = useParams();
   const location = useLocation();
+  const fromReception = Boolean(location.state?.fromReception);
   const [report, setReport] = useState(null);
   const [draft, setDraft] = useState(null);
   const [photos, setPhotos] = useState([]);
@@ -15,14 +18,39 @@ export default function ReportDetailPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [duplicateInfo, setDuplicateInfo] = useState({ isSuspectedDuplicate: false, primaryMatch: null, matches: [] });
+  const [duplicateError, setDuplicateError] = useState('');
   useEffect(() => {
     let active = true;
     setLoading(true); setError(''); setEditing(false); setReport(null); setMessage(''); setPhotos([]);
-    getReport(ticket).then((value) => { if (active) setReport(value); })
+    getReport(ticket).then((value) => {
+      if (active) {
+        setReport(value);
+        setDuplicateInfo({ isSuspectedDuplicate: false, primaryMatch: null, matches: [] });
+        setDuplicateError('');
+      }
+    })
       .catch((failure) => { if (active) setError(failure.message); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [ticket]);
+  useEffect(() => {
+    if (!report?.ticket) return undefined;
+    let active = true;
+    detectDuplicatesForTicket(report.ticket)
+      .then((result) => {
+        if (active) {
+          setDuplicateInfo(result);
+          setDuplicateError('');
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setDuplicateError('No se pudo verificar posibles duplicados en este momento.');
+        }
+      });
+    return () => { active = false; };
+  }, [report?.ticket, report?.category, report?.updatedAt]);
   function field(name, value) { setDraft((current) => ({ ...current, [name]: value })); }
   async function save(event) {
     event.preventDefault();
@@ -35,9 +63,11 @@ export default function ReportDetailPage() {
     finally { setBusy(false); }
   }
   if (loading) return <p role="status">Cargando reporte…</p>;
-  if (!report) return <section><h1>Reporte no disponible</h1><p role="alert">{error || 'No se encontró el ticket solicitado.'}</p><Link to="/reportes">Volver a mis reportes</Link></section>;
+  if (!report) return <section><h1>Reporte no disponible</h1><p role="alert">{error || 'No se encontró el ticket solicitado.'}</p><Link to={fromReception ? '/recepcion' : '/reportes'}>{fromReception ? 'Volver a recepción de reportes' : 'Volver a mis reportes'}</Link></section>;
   return <section>
-    <Link className="text-link" to="/reportes">Volver a mis reportes</Link>
+    <Link className="text-link" to={fromReception ? '/recepcion' : '/reportes'}>
+      {fromReception ? 'Volver a recepción de reportes' : 'Volver a mis reportes'}
+    </Link>
     <h1>Detalle del reporte</h1>
     {location.state?.created && <p className="success-message" role="status">Reporte guardado. Conserva tu código de seguimiento.</p>}
     <p className="ticket">{report.ticket}</p>
@@ -45,6 +75,15 @@ export default function ReportDetailPage() {
     <p>Última actualización: {new Date(report.updatedAt).toLocaleString('es-CR')}</p>
     {error && <p className="error-message" role="alert">{error}</p>}
     {message && <p className="success-message" role="status">{message}</p>}
+    {duplicateError && <p className="error-message" role="alert">{duplicateError}</p>}
+    {duplicateInfo.isSuspectedDuplicate && (
+      <DuplicateComparisonPanel
+        currentReport={report}
+        primaryMatch={duplicateInfo.primaryMatch}
+        matches={duplicateInfo.matches}
+        fromReception={fromReception}
+      />
+    )}
     <h2>Evidencias</h2><Evidence audio={report.audio} photos={report.photos} />
     {editing ? <form onSubmit={save}>
       <h2>Agregar más detalles</h2>

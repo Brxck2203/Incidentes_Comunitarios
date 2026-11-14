@@ -146,3 +146,145 @@ audio { width: 100%; min-height: 48px; margin-top: 1rem; }
 .text-link { display: inline-flex; align-items: center; min-height: 48px; }
 .skip-link { position: absolute; left: 1rem; top: -10rem; padding: .75rem; background: white; z-index: 10000; }
 .skip-link:focus { top: 1rem; }
+
+/* HU-07: Indicador municipal de posible duplicado y panel comparativo */
+.report-card-duplicate {
+  border: 2px solid #b45309;
+  background: #fffbeb;
+}
+.report-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.duplicate-badge-container {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.duplicate-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.7rem;
+  background: #9a3412;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.9rem;
+  border-radius: 999px;
+}
+.duplicate-badge-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+.duplicate-badge-meta {
+  font-size: 0.9rem;
+  color: #7c2d12;
+}
+.duplicate-comparison-panel {
+  margin: 1.5rem 0;
+  padding: 1.25rem;
+  background: #fffbeb;
+  border: 2px solid #b45309;
+  border-radius: 0.75rem;
+}
+.duplicate-comparison-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.duplicate-comparison-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: #7c2d12;
+}
+.duplicate-comparison-summary {
+  margin: 0.75rem 0 1rem;
+  color: #431407;
+}
+.duplicate-metrics-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+  margin: 0 0 1.25rem;
+  padding: 0.85rem 1rem;
+  background: #ffffff;
+  border: 1px solid #f59e0b;
+  border-radius: 0.5rem;
+}
+.duplicate-metric-item dt {
+  font-size: 0.85rem;
+  color: #475569;
+  font-weight: 600;
+}
+.duplicate-metric-item dd {
+  margin: 0.15rem 0 0;
+  font-size: 1.05rem;
+  font-weight: 750;
+  color: #152b3c;
+  overflow-wrap: anywhere;
+}
+.duplicate-comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+}
+.duplicate-comparison-card {
+  padding: 1rem;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.65rem;
+}
+.duplicate-comparison-card.original-report-card {
+  border-left: 4px solid #123f73;
+}
+.duplicate-comparison-card.incoming-report-card {
+  border-left: 4px solid #9a3412;
+}
+.comparison-card-tag {
+  margin: 0 0 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: #334155;
+}
+.comparison-details-list {
+  margin: 0.75rem 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.comparison-details-list div {
+  display: grid;
+  gap: 0.1rem;
+}
+.comparison-details-list dt {
+  font-size: 0.85rem;
+  font-weight: 650;
+  color: #475569;
+}
+.comparison-details-list dd {
+  margin: 0;
+  color: #152b3c;
+}
+.duplicate-additional-matches {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #f59e0b;
+}
+.duplicate-additional-matches h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  color: #7c2d12;
+}
+.duplicate-additional-matches ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+.duplicate-additional-matches li {
+  margin: 0.35rem 0;
+}
