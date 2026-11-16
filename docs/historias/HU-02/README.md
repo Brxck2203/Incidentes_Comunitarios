@@ -31,39 +31,56 @@ RF-01 también establece fecha/hora, ticket único, estado Registrado / Recibido
 6. Evitar registros duplicados al coincidir publicación automática, reintentos y pulsaciones repetidas.
 7. Conservar la evidencia seleccionada cuando falle el guardado o la ubicación, permitiendo reintentar sin confirmar falsamente un registro.
 
-## Punto de partida existente
+## Funcionalidad heredada
 
 HomePage.jsx ya incorpora una tarjeta de cámara con icono, un input con capture=environment y publicación automática al seleccionar una fotografía. También existen validación de fotos, geolocalización y persistencia local. No rehacer ni revertir esos ajustes: completar y verificar el flujo.
 
-La publicación automática tras seleccionar una foto es una decisión de la base; el criterio documental describe captura y publicación. Mantener esta distinción y validar con el equipo la interacción final. La apertura de cámara frente a selector depende del dispositivo y navegador; no certificar comportamiento móvil desde una inspección de código.
+La captura fotográfica publica automáticamente al seleccionar una imagen válida. La ubicación se consulta al publicar y el registro se guarda en IndexedDB; el estado “Registrado / Recibido” y la visibilidad desde Recepción describen este prototipo local, no una recepción real por un servidor municipal.
 
 Los límites de ocho fotografías por carga y 10 MB por archivo que aparecen en el servicio son restricciones técnicas provisionales de la base, no criterios de aceptación añadidos al documento.
+
+## Correcciones realizadas
+
+- Cada borrador identifica explícitamente si contiene voz o foto; al cambiar de modalidad o reemplazar evidencia se solicita confirmación, y la vista previa corresponde solo al borrador activo.
+- Todos los envíos usan una instantánea del borrador y la misma protección de concurrencia. Los eventos tardíos del selector se ignoran durante la publicación; los errores conservan evidencia y fecha para reintentar.
+- `createReport()` normaliza y valida las fotos en el propio servicio, incluso si un llamador omite la validación previa. La lista se actualiza tras confirmarse la transacción local.
+
+## Borrador, publicación y fechas
+
+- El borrador activo declara su modalidad (voz o fotografía), evidencia y fecha de incorporación. La vista previa muestra solo esa evidencia.
+- Si ya hay evidencia pendiente, cambiar de modalidad o reemplazarla requiere confirmación. Cancelar el selector no cambia ni publica el borrador.
+- La publicación automática y el botón “Publicar reporte” usan la misma ruta protegida contra concurrencia. Ante un error de ubicación o guardado se conserva evidencia y fecha para reintentar; el reintento vuelve a consultar ubicación y solo confirma/navega con el ticket al completar el guardado.
+- `createdAt` es la fecha/hora local asignada al registrar el reporte. `capturedAt` es la hora guardada al iniciar la solicitud de grabación de voz o al incorporar la foto seleccionada al borrador; no es la fecha EXIF ni garantiza el instante exacto del obturador.
+- `position.measuredAt` es la fecha/hora reportada por la consulta de ubicación del dispositivo realizada al publicar. No se inventan coordenadas ni se asegura que correspondan al instante de la fotografía.
+- `capture="environment"` conserva la preferencia por la cámara trasera, pero la apertura de cámara o selector depende del navegador y dispositivo.
+
+## Visibilidad local desde Recepción
+
+Una vez confirmada la transacción de creación, la aplicación notifica a la lista abierta en la misma pestaña y, mediante BroadcastChannel, a otras pestañas del mismo origen. Recepción también consulta IndexedDB cada tres segundos como respaldo. El canal transmite solo una notificación, no archivos; las evidencias permanecen en IndexedDB y siguen disponibles desde el detalle del reporte.
+
+Esto no sincroniza dispositivos ni constituye una conexión con el municipio. No se implementan aquí autenticación, admisión, filtros ni mapa de HU-11.
 
 ## Archivos y coordinación
 
 - src/pages/HomePage.jsx: captura y publicación de fotografía; coordinar con Joan, responsable de HU-01, para no sobrescribir la captura de voz.
 - src/services/geolocation.js: obtención de ubicación; coordinar su contrato con HU-01 y HU-05.
-- src/services/reportRepository.js: validación y registro; acordar cambios de estructura antes de modificar operaciones compartidas.
+- src/services/reportRepository.js: validación de evidencia en el límite de persistencia, registro y notificación posterior a la transacción; conserva la estructura del reporte.
+- src/services/reportNotifications.js: notificación local y entre pestañas; no transporta evidencias.
 - src/components/Evidence.jsx: visualización de la evidencia; coordinar con Joan en HU-04.
 - src/pages/ReportsPage.jsx y src/pages/ReportDetailPage.jsx: comprobar acceso a evidencia desde Recepción, sin desarrollar aquí la consola completa de HU-11.
 - src/App.css: preservar las tarjetas y limitar los cambios visuales a esta historia.
 
 HU-05 se ocupa de ajustar manualmente la ubicación. HU-02 se centra en capturar, vincular la ubicación automática y registrar la fotografía; no implementar aquí la edición del mapa ni la complementación de HU-03.
 
-## Validación técnica propuesta
+## Verificaciones
 
-- Tomar una fotografía en móvil, publicar sin texto y comprobar ticket, estado, coordenadas y evidencia.
-- Abrir el reporte desde Recepción y comprobar la imagen; recargar y verificar persistencia.
-- Cancelar la captura y comprobar que no se cree un reporte vacío.
-- Denegar ubicación y comprobar mensaje de error, ausencia de confirmación falsa y posibilidad de reintento.
-- Probar archivo vacío, formato no admitido y fallo de persistencia sin perder evidencia seleccionada.
-- Probar publicación automática y manual concurrentes y comprobar que no generen dos tickets.
-- Comprobar que usar la cámara no publique por accidente audio previo conservado de otro intento.
-- Medir interacciones reales y controles táctiles en móvil antes de declarar cumplimiento de RNF-01.
-- Ejecutar npm run lint y npm run build y registrar resultados reales en el pull request.
+- En esta intervención se inspeccionaron los flujos de captura, grabación, persistencia, geolocalización, listado y detalle, y se verificó el estado limpio de la rama y su relación con `origin/main`.
+- No se ejecutaron lint, build, pruebas automatizadas ni verificaciones manuales en navegador/dispositivos; no se declaran aprobadas.
+- Queda pendiente probar en navegador el selector cancelado, errores de ubicación/guardado, reintentos y actualización de Recepción en varias pestañas; también comprobar captura y controles táctiles en dispositivos móviles.
+- La automatización de lint/build/pruebas está pospuesta por decisión del equipo. Antes de declarar cumplimiento de RNF-01 se deben medir las interacciones reales y los controles táctiles en móvil.
 
 ## Reglas de integración
 
-Trabajar únicamente en esta rama y abrir pull request hacia main, con referencia a HU-02, cambios, pruebas y limitaciones. No hacer push directo a main. Actualizar con main antes de integrar y solicitar revisión de otro integrante. Conservar los ajustes de cámara y micrófono heredados, sin presentar ese código como implementación nueva.
+Trabajar únicamente en esta rama y solicitar revisión antes de integrar a `main`. No integrar mientras no se hayan revisado los cambios y sus limitaciones. Conservar los ajustes de cámara y micrófono heredados, sin presentarlos como implementación nueva.
 
 Este README usa una ruta propia para no sobrescribir el README general ni los documentos de otras historias al fusionar.

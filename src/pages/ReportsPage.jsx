@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getReports } from '../services/reportRepository.js';
+import { subscribeToReportChanges } from '../services/reportNotifications.js';
 
 export default function ReportsPage({ reception = false }) {
   const [reports, setReports] = useState([]);
@@ -15,8 +16,14 @@ export default function ReportsPage({ reception = false }) {
     }
     void refresh();
     window.addEventListener('focus', refresh);
-    const interval = reception ? setInterval(refresh, 5000) : null;
-    return () => { active = false; window.removeEventListener('focus', refresh); clearInterval(interval); };
+    const unsubscribe = subscribeToReportChanges(refresh);
+    const interval = reception ? setInterval(refresh, 3000) : null;
+    return () => {
+      active = false;
+      window.removeEventListener('focus', refresh);
+      unsubscribe();
+      clearInterval(interval);
+    };
   }, [reception]);
   return <section>
     <h1>{reception ? 'Recepción de reportes' : 'Mis reportes'}</h1>
