@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import useAudioRecorder from '../hooks/useAudioRecorder.js';
-import { createReport, validatePhotos } from '../services/reportRepository.js';
+import { createReport, getCurrentReporterId, validatePhotos } from '../services/reportRepository.js';
 import { getCurrentPosition } from '../services/geolocation.js';
 import Evidence from '../components/Evidence.jsx';
 
@@ -53,55 +53,37 @@ export default function HomePage() {
   const cameraInputRef = useRef(null);
   const navigate = useNavigate();
 
-  function updateDraft(nextDraft) {
-    draftRef.current = nextDraft;
-    setDraft(nextDraft);
-  }
-
   useEffect(() => {
     active.current = true;
     return () => { active.current = false; };
   }, []);
 
-  async function publishReport(options = {}) {
+  async function publishReport({ audioBlob, photoList, stopReason = 'send' } = {}) {
     if (publishing.current || !active.current) return;
     publishing.current = true;
     setBusy(true);
     setError('');
-    const currentDraft = draftRef.current;
-    const snapshot = {
-      ...currentDraft,
-      audio: currentDraft.audio,
-      photos: [...currentDraft.photos],
-      capturedAt: currentDraft.capturedAt || getTimestamp(),
-    };
-    if (!currentDraft.capturedAt) updateDraft(snapshot);
-    const hasAudioOverride = Object.prototype.hasOwnProperty.call(options, 'audioBlob');
+    const recordTime = capturedAt.current || getTimestamp();
+    const photosToSend = photoList !== undefined ? photoList : photos;
     try {
-      let audio = hasAudioOverride ? options.audioBlob : snapshot.audio;
-      if (snapshot.mode === 'voice' && !hasAudioOverride && voice.recording) {
-        audio = await voice.stop(options.stopReason || 'send');
-      }
+      const audio = audioBlob !== undefined
+        ? audioBlob
+        : (voice.recording ? await voice.stop(stopReason) : voice.audio);
       if (!active.current) return;
-      if (snapshot.mode === 'voice' && audio?.size) {
-        snapshot.audio = audio;
-        if (draftRef.current.mode === 'voice' && draftRef.current.capturedAt === snapshot.capturedAt) {
-          updateDraft({ ...draftRef.current, audio });
-        }
-      }
-      if (!audio?.size && !snapshot.photos.length) {
-        setError(snapshot.mode === 'voice'
-          ? 'La grabación no generó audio. Vuelve a grabar antes de publicar.'
-          : 'Selecciona una fotografía o graba una nota de voz antes de publicar.');
+      if (!audio?.size && !photosToSend.length) {
+        setError('La grabación no generó audio. Vuelve a grabar antes de publicar.');
         return;
       }
       const position = await getCurrentPosition();
       if (!active.current) return;
+      let reporterId = null;
+      try { reporterId = getCurrentReporterId(); } catch { /* Basic reporting remains available. */ }
       const report = await createReport({
         audio,
-        photos: snapshot.photos,
+        photos: photosToSend,
         position,
-        capturedAt: snapshot.capturedAt,
+        capturedAt: recordTime,
+        reporterId,
       });
       if (!active.current) return;
       navigate(`/reportes/${report.ticket}`, { state: { created: true } });
@@ -118,7 +100,10 @@ export default function HomePage() {
   });
 
   async function handleCameraCapture(event) {
-    const input = event.currentTarget;
+    if (!active.current) return;
+    setError('');
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
     try {
       if (!active.current || publishing.current) return;
       const files = input.files;
@@ -143,7 +128,7 @@ export default function HomePage() {
   }
 
   function openCamera() {
-    if (!active.current || publishing.current || busy || voice.starting || voice.recording) return;
+    if (publishing.current || busy || voice.starting) return;
     cameraInputRef.current?.click();
   }
 
@@ -152,23 +137,16 @@ export default function HomePage() {
     if (voice.recording) {
       await publishReport({ stopReason: 'send' });
     } else {
-      if (hasEvidence(draftRef.current)
-        && !window.confirm('Hay una evidencia pendiente. ¿Deseas reemplazarla por una nueva nota de voz?')) return;
-      updateDraft({ mode: 'voice', audio: null, photos: [], capturedAt: getTimestamp() });
+      capturedAt.current = getTimestamp();
       setError('');
       await voice.start();
     }
   }
 
-  async function stopForReview() {
-    try {
-      const audio = await voice.stop('review');
-      if (audio?.size && draftRef.current.mode === 'voice' && !publishing.current) {
-        updateDraft({ ...draftRef.current, audio });
-      }
-    } catch (failure) {
+  function stopForReview() {
+    void voice.stop('review').catch((failure) => {
       if (active.current) setError(failure.message);
-    }
+    });
   }
 
   return (
@@ -254,7 +232,7 @@ export default function HomePage() {
             <button
               type="button"
               className="secondary"
-              onClick={() => { void stopForReview(); }}
+              onClick={stopForReview}
               disabled={busy}
             >
               Detener y escuchar primero

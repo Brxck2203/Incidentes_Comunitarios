@@ -146,3 +146,12 @@ audio { width: 100%; min-height: 48px; margin-top: 1rem; }
 .text-link { display: inline-flex; align-items: center; min-height: 48px; }
 .skip-link { position: absolute; left: 1rem; top: -10rem; padding: .75rem; background: white; z-index: 10000; }
 .skip-link:focus { top: 1rem; }
+
+/* HU-10: neighbor confirmation and local resolution notices. */
+.selected-incident, .confirm-section, .confirm-form { margin: 1rem 0; padding: 1rem; border: 1px solid #cbd5e1; border-radius: .65rem; background: #fff; }
+.confirm-form h3 { margin-top: 0; }
+.selected-incident .confirm-form { border: none; padding: 0; }
+.incident-popup button { min-height: 48px; }
+.incident-popup p { overflow-wrap: anywhere; max-width: 240px; }
+.resolution-notices { padding: 1rem; margin: 1rem 0; border: 2px solid #166534; border-radius: .65rem; background: #e2f4e8; }
+.resolution-notices h2 { margin-top: .25rem; }
