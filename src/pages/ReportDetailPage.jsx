@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { categories, getReport, complementReport, getCurrentReporterId, validatePhotos } from '../services/reportRepository.js';
-import { endorsementCount, isActiveReport } from '../services/reportEndorsements.js';
+import { categories, complementReport, findPotentialDuplicates, getCurrentReporterId, getReport, validatePhotos } from '../services/reportRepository.js';
+import { endorsementCount, isActiveReport } from '../services/reportPriority.js';
+import DuplicateWarning from '../components/DuplicateWarning.jsx';
 import ConfirmIncidentForm from '../components/ConfirmIncidentForm.jsx';
 import Evidence from '../components/Evidence.jsx';
 import LocationMap from '../components/LocationMap.jsx';
@@ -24,7 +25,8 @@ export default function ReportDetailPage() {
   const currentTicketRef = useRef(ticket);
   const [confirmOpen, setConfirmOpen] = useState(Boolean(location.state?.confirm));
   const [viewerId] = useState(() => { try { return getCurrentReporterId(); } catch { return null; } });
-
+  const [pendingEdit, setPendingEdit] = useState(null);
+  const [nearbyDraftMatches, setNearbyDraftMatches] = useState([]);
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
@@ -36,27 +38,47 @@ export default function ReportDetailPage() {
     setLoading(true); setError(''); setEditing(false); setReport(null); setDraft(null);
     setMessage(''); setPhotos([]); setPhotoSelectionNotice('');
     setConfirmOpen(Boolean(location.state?.confirm));
+    setPendingEdit(null); setNearbyDraftMatches([]);
     getReport(ticket).then((value) => { if (active) setReport(value); })
       .catch((failure) => { if (active) setError(failure.message); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [ticket, location.state?.confirm]);
   function field(name, value) {
-    if (!busyRef.current) setDraft((current) => ({ ...current, [name]: value }));
-  }
-  async function save(event) {
-    event.preventDefault();
     if (busyRef.current) return;
-    const snapshot = {
-      ticket,
-      details: { ...draft, position: { ...draft.position } },
-      photos: [...photos],
-    };
+    setDraft((current) => ({ ...current, [name]: value }));
+    setPendingEdit(null);
+  }
+  useEffect(() => {
+    let active = true;
+    if (editing && draft?.category && draft?.position) {
+      findPotentialDuplicates(draft.position, draft.category, ticket)
+        .then((matches) => {
+          if (active && mountedRef.current && currentTicketRef.current === ticket) setNearbyDraftMatches(matches);
+        })
+        .catch((failure) => {
+          if (active && mountedRef.current && currentTicketRef.current === ticket) setError(failure.message);
+        });
+    }
+    else if (active) setNearbyDraftMatches([]);
+    return () => { active = false; };
+  }, [editing, draft?.category, draft?.position, ticket]);
+  async function saveSnapshot(snapshot, duplicatesChecked = false) {
+    if (busyRef.current || !mountedRef.current || currentTicketRef.current !== snapshot.ticket) return;
     const operation = Symbol('complement-save');
     busyRef.current = true;
     operationRef.current = operation;
     setBusy(true); setError(''); setMessage('');
     try {
+      if (!duplicatesChecked) {
+        const matches = snapshot.details.category
+          ? await findPotentialDuplicates(snapshot.details.position, snapshot.details.category, snapshot.ticket)
+          : [];
+        if (mountedRef.current && currentTicketRef.current === snapshot.ticket && matches.length) {
+          setPendingEdit({ ...snapshot, matches });
+          return;
+        }
+      }
       const updated = await complementReport(snapshot.ticket, snapshot.details, snapshot.photos);
       if (mountedRef.current && currentTicketRef.current === snapshot.ticket) {
         setReport(updated);
@@ -64,6 +86,7 @@ export default function ReportDetailPage() {
         setDraft(null);
         setPhotos([]);
         setPhotoSelectionNotice('');
+        setPendingEdit(null);
         setMessage('Cambios guardados.');
       }
     } catch (failure) {
@@ -75,6 +98,16 @@ export default function ReportDetailPage() {
         if (mountedRef.current) setBusy(false);
       }
     }
+  }
+  async function save(event) {
+    event.preventDefault();
+    if (busyRef.current || pendingEdit || !draft) return;
+    const snapshot = {
+      ticket,
+      details: { ...draft, position: { ...draft.position } },
+      photos: [...photos],
+    };
+    await saveSnapshot(snapshot);
   }
   if (loading) return <p role="status">Cargando reporte…</p>;
   if (!report) return <section><h1>Reporte no disponible</h1><p role="alert">{error || 'No se encontró el ticket solicitado.'}</p><Link to="/reportes">Volver a mis reportes</Link></section>;
@@ -122,6 +155,7 @@ export default function ReportDetailPage() {
           setPhotos(validatePhotos(input.files));
           setPhotoSelectionNotice('');
           setError('');
+          setPendingEdit(null);
         } catch (failure) {
           setPhotoSelectionNotice(`${failure.message} ${photos.length
             ? 'Se conserva la selección válida que ya estaba pendiente.'
@@ -135,9 +169,19 @@ export default function ReportDetailPage() {
       <h2>Ajustar ubicación</h2>
       <LocationMap position={draft.position} editable={!busy} onChange={(position) => field('position', position)} />
       <p>Latitud: {draft.position.lat.toFixed(6)} · Longitud: {draft.position.lng.toFixed(6)}</p>
-      <div className="actions"><button type="submit" disabled={busy}>{busy ? 'Guardando…' : 'Guardar cambios'}</button>
+      {!pendingEdit && nearbyDraftMatches.length > 0 && <div className="duplicate-hint" role="status">
+        <strong>Hay reportes abiertos de la misma categoría cerca de esta ubicación.</strong>
+        <ul>{nearbyDraftMatches.map((match) => <li key={match.ticket}>
+          <Link to={`/reportes/${match.ticket}`} target="_blank" rel="noopener noreferrer">Ver {match.ticket}</Link> · {Math.round(match.distanceMeters)} m
+        </li>)}</ul>
+      </div>}
+      {pendingEdit && <DuplicateWarning matches={pendingEdit.matches} busy={busy}
+        continueLabel="Guardar cambios de todos modos"
+        onContinue={() => { void saveSnapshot(pendingEdit, true); }}
+        onCancel={() => setPendingEdit(null)} />}
+      <div className="actions"><button type="submit" disabled={busy || Boolean(pendingEdit)}>{busy ? 'Guardando…' : 'Guardar cambios'}</button>
         <button className="secondary" type="button" disabled={busy} onClick={() => {
-          setEditing(false); setDraft(null); setPhotos([]); setPhotoSelectionNotice(''); setError('');
+          setEditing(false); setDraft(null); setPhotos([]); setPhotoSelectionNotice(''); setPendingEdit(null); setError('');
         }}>Cancelar</button></div>
     </form> : <>
       <h2>Información del incidente</h2>
@@ -156,7 +200,7 @@ export default function ReportDetailPage() {
           references: report.references || '',
           position: { ...report.position },
         });
-        setEditing(true); setMessage(''); setPhotoSelectionNotice('');
+        setEditing(true); setMessage(''); setPhotoSelectionNotice(''); setPendingEdit(null);
       }}>Agregar más detalles</button>
     </>}
     <h2>Historial de actualizaciones</h2>

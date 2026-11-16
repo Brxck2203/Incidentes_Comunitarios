@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import useAudioRecorder from '../hooks/useAudioRecorder.js';
-import { createReport, getCurrentReporterId, validatePhotos } from '../services/reportRepository.js';
+import { categories, createReport, findPotentialDuplicates, getCurrentReporterId, validatePhotos } from '../services/reportRepository.js';
+import DuplicateWarning from '../components/DuplicateWarning.jsx';
 import { getCurrentPosition } from '../services/geolocation.js';
 import Evidence from '../components/Evidence.jsx';
 
@@ -45,6 +46,8 @@ function hasEvidence(draft) {
 
 export default function HomePage() {
   const [draft, setDraft] = useState(EMPTY_DRAFT);
+  const [category, setCategory] = useState('');
+  const [pendingReport, setPendingReport] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const draftRef = useRef(EMPTY_DRAFT);
@@ -64,8 +67,21 @@ export default function HomePage() {
     return () => { active.current = false; };
   }, []);
 
+  async function persistReport(payload) {
+    const report = await createReport(payload);
+    if (active.current) navigate(`/reportes/${report.ticket}`, { state: { created: true } });
+  }
+
+  async function continuePending() {
+    if (publishing.current || !pendingReport) return;
+    publishing.current = true; setBusy(true); setError('');
+    try { await persistReport(pendingReport); if (active.current) setPendingReport(null); }
+    catch (failure) { if (active.current) setError(failure.message); }
+    finally { publishing.current = false; if (active.current) setBusy(false); }
+  }
+
   async function publishReport(options = {}) {
-    if (publishing.current || !active.current) return;
+    if (publishing.current || !active.current || pendingReport) return;
     publishing.current = true;
     setBusy(true);
     setError('');
@@ -98,15 +114,21 @@ export default function HomePage() {
       }
       const position = await getCurrentPosition();
       if (!active.current) return;
-      const report = await createReport({
+      const payload = {
         audio,
         photos: snapshot.photos,
         position,
         capturedAt: snapshot.capturedAt,
         reporterId,
-      });
+        category,
+      };
+      const matches = category ? await findPotentialDuplicates(position, category) : [];
       if (!active.current) return;
-      navigate(`/reportes/${report.ticket}`, { state: { created: true } });
+      if (matches.length) {
+        setPendingReport({ ...payload, matches });
+        return;
+      }
+      await persistReport(payload);
     } catch (failure) {
       if (active.current) setError(failure.message);
     } finally {
@@ -145,12 +167,12 @@ export default function HomePage() {
   }
 
   function openCamera() {
-    if (!active.current || publishing.current || busy || voice.starting || voice.recording) return;
+    if (!active.current || publishing.current || busy || voice.starting || voice.recording || pendingReport) return;
     cameraInputRef.current?.click();
   }
 
   async function handleMicClick() {
-    if (publishing.current || busy || voice.starting) return;
+    if (publishing.current || busy || voice.starting || pendingReport) return;
     if (voice.recording) {
       await publishReport({ stopReason: 'send' });
     } else {
@@ -183,7 +205,7 @@ export default function HomePage() {
         <button
           type="button"
           className={`capture-action-card mic-card ${voice.recording ? 'recording-active' : ''}`}
-          disabled={busy || voice.starting}
+          disabled={busy || voice.starting || Boolean(pendingReport)}
           onClick={() => { void handleMicClick(); }}
           aria-label={voice.recording ? 'Detener grabación y enviar reporte' : 'Grabar nota de voz y enviar al instante'}
         >
@@ -207,7 +229,7 @@ export default function HomePage() {
         <button
           type="button"
           className="capture-action-card camera-card"
-          disabled={busy || voice.starting || voice.recording}
+          disabled={busy || voice.starting || voice.recording || Boolean(pendingReport)}
           onClick={openCamera}
           aria-label="Tomar fotografía con la cámara y enviar al instante"
         >
@@ -232,6 +254,18 @@ export default function HomePage() {
           aria-hidden="true"
         />
       </div>
+
+      <label className="report-category-field">Categoría del incidente (opcional)
+        <select value={category} disabled={busy || Boolean(pendingReport)} onChange={(event) => setCategory(event.target.value)}>
+          <option value="">Seleccionar después</option>
+          {categories.map((value) => <option key={value} value={value}>{value}</option>)}
+        </select>
+        <span className="field-help">Seleccionarla permite detectar reportes cercanos antes de enviarlo. Puedes seguir reportando sin elegirla.</span>
+      </label>
+
+      {pendingReport && <DuplicateWarning matches={pendingReport.matches} busy={busy}
+        onContinue={() => { void continuePending(); }}
+        onCancel={() => { setPendingReport(null); setError(''); }} />}
 
       {busy && (
         <div className="sending-indicator" role="status" aria-live="polite">
@@ -275,7 +309,7 @@ export default function HomePage() {
       <button
         className="publish-button"
         type="button"
-        disabled={busy || voice.starting || (!voice.recording && !draft.audio?.size && !draft.photos.length)}
+        disabled={busy || voice.starting || Boolean(pendingReport) || (!voice.recording && !voice.audio && !photos.length)}
         onClick={() => { void publishReport(); }}
       >
         {busy ? 'Obteniendo ubicación y guardando…' : 'Publicar reporte'}
