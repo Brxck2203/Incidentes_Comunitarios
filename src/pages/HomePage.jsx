@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import useAudioRecorder from '../hooks/useAudioRecorder.js';
-import { categories, createReport, findPotentialDuplicates, validatePhotos } from '../services/reportRepository.js';
+import { categories, createReport, findPotentialDuplicates, getCurrentReporterId, validatePhotos } from '../services/reportRepository.js';
 import DuplicateWarning from '../components/DuplicateWarning.jsx';
 import { getCurrentPosition } from '../services/geolocation.js';
 import Evidence from '../components/Evidence.jsx';
@@ -38,19 +38,13 @@ function getTimestamp() {
   return new Date().toISOString();
 }
 
-const EMPTY_DRAFT = { mode: null, audio: null, photos: [], capturedAt: null };
-
-function hasEvidence(draft) {
-  return Boolean(draft.audio?.size || draft.photos.length);
-}
-
 export default function HomePage() {
   const [photos, setPhotos] = useState([]);
   const [category, setCategory] = useState('');
   const [pendingReport, setPendingReport] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const draftRef = useRef(EMPTY_DRAFT);
+  const capturedAt = useRef(null);
   const publishing = useRef(false);
   const active = useRef(true);
   const cameraInputRef = useRef(null);
@@ -62,7 +56,9 @@ export default function HomePage() {
   }, []);
 
   async function persistReport(payload) {
-    const report = await createReport(payload);
+    let reporterId = null;
+    try { reporterId = getCurrentReporterId(); } catch { /* Reporting still works when localStorage is disabled. */ }
+    const report = await createReport({ ...payload, reporterId });
     if (active.current) navigate(`/reportes/${report.ticket}`, { state: { created: true } });
   }
 
@@ -115,28 +111,23 @@ export default function HomePage() {
   async function handleCameraCapture(event) {
     if (!active.current) return;
     setError('');
+    if (publishing.current || busy || voice.recording || voice.starting || pendingReport) {
+      event.target.value = '';
+      return;
+    }
     const files = event.target.files;
     if (!files || files.length === 0) return;
     try {
-      if (!active.current || publishing.current) return;
-      const files = input.files;
-      if (!files?.length) return;
-      if (voice.recording || voice.starting) {
-        setError('Detén la grabación antes de seleccionar una fotografía.');
-        return;
-      }
       const selected = validatePhotos(files);
       if (selected.length) {
-        if (hasEvidence(draftRef.current)
-          && !window.confirm('Hay una evidencia pendiente. ¿Deseas reemplazarla por esta fotografía?')) return;
-        updateDraft({ mode: 'photo', audio: null, photos: selected, capturedAt: getTimestamp() });
-        setError('');
-        await publishReport();
+        setPhotos(selected);
+        capturedAt.current = getTimestamp();
+        await publishReport({ photoList: selected });
       }
     } catch (failure) {
       if (active.current) setError(failure.message);
     } finally {
-      input.value = '';
+      event.target.value = '';
     }
   }
 
@@ -214,8 +205,8 @@ export default function HomePage() {
           type="file"
           accept="image/jpeg,image/png,image/webp,image/avif"
           capture="environment"
+          disabled={busy || voice.starting || voice.recording || Boolean(pendingReport)}
           style={{ display: 'none' }}
-          disabled={busy || voice.starting || voice.recording}
           onChange={(event) => { void handleCameraCapture(event); }}
           tabIndex={-1}
           aria-hidden="true"
@@ -237,7 +228,7 @@ export default function HomePage() {
       {busy && (
         <div className="sending-indicator" role="status" aria-live="polite">
           <span className="spinner" aria-hidden="true" />
-          <span>Obteniendo ubicación y guardando el reporte local…</span>
+          <span>Obteniendo ubicación y enviando reporte…</span>
         </div>
       )}
 
@@ -266,10 +257,7 @@ export default function HomePage() {
         </div>
       )}
 
-      <Evidence
-        audio={draft.mode === 'voice' ? draft.audio : null}
-        photos={draft.mode === 'photo' ? draft.photos : []}
-      />
+      <Evidence audio={voice.audio} photos={photos} />
 
       {(error || voice.error) && <p className="error-message" role="alert">{error || voice.error}</p>}
 
@@ -282,7 +270,7 @@ export default function HomePage() {
         {busy ? 'Obteniendo ubicación y guardando…' : 'Publicar reporte'}
       </button>
 
-      <p>Se asociarán la ubicación del dispositivo al publicar y la fecha de incorporación de la evidencia.</p>
+      <p>Se asociarán la ubicación de tu dispositivo y la fecha del reporte.</p>
       <Link className="text-link" to="/reportes">Consultar mis reportes</Link>
     </section>
   );

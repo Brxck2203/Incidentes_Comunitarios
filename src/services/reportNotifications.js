@@ -4,7 +4,7 @@ const sourceId = `${Date.now()}-${Math.random()}`;
 
 export function notifyReportCreated() {
   try {
-    window.dispatchEvent(new Event(REPORTS_CHANGED_EVENT));
+    if (typeof window.dispatchEvent === 'function') window.dispatchEvent(new Event(REPORTS_CHANGED_EVENT));
   } catch (failure) {
     console.warn('El reporte se guardó, pero no se pudo actualizar esta pestaña.', failure);
   }
@@ -13,7 +13,7 @@ export function notifyReportCreated() {
   let channel;
   try {
     channel = new BroadcastChannel(REPORTS_CHANNEL);
-    channel.postMessage({ type: 'report-created', sourceId });
+    channel.postMessage({ type: 'reports-changed', sourceId });
   } catch (failure) {
     console.warn('El reporte se guardó, pero no se pudo notificar a otras pestañas.', failure);
   }
@@ -33,7 +33,7 @@ export function subscribeToReportChanges(onChange) {
     try {
       channel = new BroadcastChannel(REPORTS_CHANNEL);
       channel.addEventListener('message', ({ data }) => {
-        if (data?.type === 'report-created' && data.sourceId !== sourceId) onChange();
+        if (data?.type === 'reports-changed' && data.sourceId !== sourceId) onChange();
       });
     } catch (failure) {
       console.warn('No se pudo iniciar la notificación entre pestañas; se usará la actualización periódica.', failure);
