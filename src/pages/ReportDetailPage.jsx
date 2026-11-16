@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { categories, complementReport, findPotentialDuplicates, getCurrentReporterId, getReport, validatePhotos } from '../services/reportRepository.js';
 import { endorsementCount, isActiveReport } from '../services/reportPriority.js';
+import { detectDuplicatesForTicket } from '../services/duplicateDetection.js';
 import DuplicateWarning from '../components/DuplicateWarning.jsx';
+import DuplicateComparisonPanel from '../components/DuplicateComparisonPanel.jsx';
 import ConfirmIncidentForm from '../components/ConfirmIncidentForm.jsx';
 import Evidence from '../components/Evidence.jsx';
 import LocationMap from '../components/LocationMap.jsx';
@@ -10,6 +12,7 @@ import LocationMap from '../components/LocationMap.jsx';
 export default function ReportDetailPage() {
   const { ticket } = useParams();
   const location = useLocation();
+  const fromReception = Boolean(location.state?.fromReception);
   const [report, setReport] = useState(null);
   const [draft, setDraft] = useState(null);
   const [photos, setPhotos] = useState([]);
@@ -27,6 +30,16 @@ export default function ReportDetailPage() {
   const [viewerId] = useState(() => { try { return getCurrentReporterId(); } catch { return null; } });
   const [pendingEdit, setPendingEdit] = useState(null);
   const [nearbyDraftMatches, setNearbyDraftMatches] = useState([]);
+  const [duplicateResult, setDuplicateResult] = useState({
+    key: '',
+    info: { isSuspectedDuplicate: false, primaryMatch: null, matches: [] },
+    error: '',
+  });
+  const duplicateRequestKey = report?.ticket
+    ? `${report.ticket}|${report.category || ''}|${report.updatedAt || ''}`
+    : '';
+  const duplicateStateCurrent = duplicateResult.key === duplicateRequestKey;
+  const duplicateLoading = Boolean(duplicateRequestKey) && !duplicateStateCurrent;
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
@@ -44,6 +57,27 @@ export default function ReportDetailPage() {
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [ticket, location.state?.confirm]);
+  useEffect(() => {
+    if (!report?.ticket) return undefined;
+    let active = true;
+    const key = `${report.ticket}|${report.category || ''}|${report.updatedAt || ''}`;
+    detectDuplicatesForTicket(report.ticket)
+      .then((result) => {
+        if (active) {
+          setDuplicateResult({ key, info: result, error: '' });
+        }
+      })
+      .catch((failure) => {
+        if (active) {
+          setDuplicateResult({
+            key,
+            info: { isSuspectedDuplicate: false, primaryMatch: null, matches: [] },
+            error: `No se pudo verificar posibles duplicados: ${failure.message}`,
+          });
+        }
+      });
+    return () => { active = false; };
+  }, [report?.ticket, report?.category, report?.updatedAt]);
   function field(name, value) {
     if (busyRef.current) return;
     setDraft((current) => ({ ...current, [name]: value }));
@@ -110,9 +144,11 @@ export default function ReportDetailPage() {
     await saveSnapshot(snapshot);
   }
   if (loading) return <p role="status">Cargando reporte…</p>;
-  if (!report) return <section><h1>Reporte no disponible</h1><p role="alert">{error || 'No se encontró el ticket solicitado.'}</p><Link to="/reportes">Volver a mis reportes</Link></section>;
+  if (!report) return <section><h1>Reporte no disponible</h1><p role="alert">{error || 'No se encontró el ticket solicitado.'}</p><Link to={fromReception ? '/recepcion' : '/reportes'}>{fromReception ? 'Volver a recepción de reportes' : 'Volver a mis reportes'}</Link></section>;
   return <section>
-    <Link className="text-link" to="/reportes">Volver a mis reportes</Link>
+    <Link className="text-link" to={fromReception ? '/recepcion' : '/reportes'}>
+      {fromReception ? 'Volver a recepción de reportes' : 'Volver a mis reportes'}
+    </Link>
     <h1>Detalle del reporte</h1>
     {location.state?.created && <p className="success-message" role="status">Reporte guardado. Conserva tu código de seguimiento.</p>}
     <p className="ticket">{report.ticket}</p>
@@ -120,6 +156,19 @@ export default function ReportDetailPage() {
     <p>Última actualización: {new Date(report.updatedAt).toLocaleString('es-CR')}</p>
     {error && <p className="error-message" role="alert">{error}</p>}
     {message && <p className="success-message" role="status">{message}</p>}
+    {duplicateLoading && <p role="status">Verificando posibles reportes duplicados…</p>}
+    {duplicateStateCurrent && duplicateResult.error && <p className="error-message" role="alert">{duplicateResult.error}</p>}
+    {duplicateStateCurrent && duplicateResult.info.isSuspectedDuplicate && (
+      <DuplicateComparisonPanel
+        currentReport={report}
+        primaryMatch={duplicateResult.info.primaryMatch}
+        matches={duplicateResult.info.matches}
+        fromReception={fromReception}
+      />
+    )}
+    {duplicateStateCurrent && !duplicateResult.error && !duplicateResult.info.isSuspectedDuplicate && (
+      <p role="status">No se encontraron posibles reportes duplicados.</p>
+    )}
     <h2>Evidencias</h2><Evidence audio={report.audio} photos={report.photos || []} />
     {report.confirmations?.some((confirmation) => confirmation.photos?.length > 0) && <>
       <h3>Fotografías complementarias de vecinos</h3>

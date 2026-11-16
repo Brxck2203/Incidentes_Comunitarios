@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getCurrentReporterId, getReports, resolveIncident, setReportSeverity } from '../services/reportRepository.js';
 import { endorsementCount, isActiveReport, priorityInfo, severityLevels, sortReceptionReports } from '../services/reportPriority.js';
+import { buildDuplicateMap } from '../services/duplicateDetection.js';
+import DuplicateBadge from '../components/DuplicateBadge.jsx';
 import ConfirmIncidentForm from '../components/ConfirmIncidentForm.jsx';
 import IncidentMap from '../components/IncidentMap.jsx';
 import { subscribeToReportChanges } from '../services/reportNotifications.js';
@@ -16,6 +18,10 @@ export default function ReportsPage({ reception = false }) {
   const [savingTicket, setSavingTicket] = useState('');
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [reporterId] = useState(() => { try { return getCurrentReporterId(); } catch { return null; } });
+  const duplicateMap = useMemo(
+    () => (reception ? buildDuplicateMap(reports) : {}),
+    [reception, reports],
+  );
   useEffect(() => {
     let active = true;
     async function refresh() {
@@ -98,8 +104,13 @@ export default function ReportsPage({ reception = false }) {
     {!loading && !error && !reports.length && <p>Aún no hay reportes registrados.</p>}
     <ul className="report-list">{visibleReports.map((report) => {
       const info = priorityInfo(report);
-      return <li key={report.ticket} className="report-card">
-        <Link to={`/reportes/${report.ticket}`}>{report.ticket}</Link>
+      const duplicateInfo = reception ? duplicateMap[report.ticket] : null;
+      const isDuplicate = Boolean(duplicateInfo?.isSuspectedDuplicate);
+      return <li key={report.ticket} className={`report-card ${isDuplicate ? 'report-card-duplicate' : ''}`}>
+        <div className="report-card-header">
+          <Link to={`/reportes/${report.ticket}`} state={reception ? { fromReception: true } : undefined}>{report.ticket}</Link>
+          {isDuplicate && <DuplicateBadge match={duplicateInfo.primaryMatch} count={duplicateInfo.matches.length} />}
+        </div>
         <p>{report.category || 'Sin clasificar'} · {report.status}</p>
         <p>{new Date(report.createdAt).toLocaleString('es-CR')}</p>
         {endorsementCount(report) > 0 && <p>Vecinos que confirman el incidente: <strong>{endorsementCount(report)}</strong></p>}
