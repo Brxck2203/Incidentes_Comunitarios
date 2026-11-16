@@ -12,6 +12,9 @@ export default function ReportsPage({ reception = false }) {
   const [message, setMessage] = useState('');
   const [savingTicket, setSavingTicket] = useState('');
   const [loading, setLoading] = useState(true);
+  const [savingTicket, setSavingTicket] = useState('');
+  const [selectedTicket, setSelectedTicket] = useState(null);
+  const [reporterId] = useState(() => { try { return getCurrentReporterId(); } catch { return null; } });
   useEffect(() => {
     let active = true;
     async function refresh() {

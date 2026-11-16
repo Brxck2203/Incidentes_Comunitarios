@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { categories, getReport, complementReport, validatePhotos } from '../services/reportRepository.js';
+import { categories, getReport, complementReport, getCurrentReporterId, validatePhotos } from '../services/reportRepository.js';
+import { endorsementCount, isActiveReport } from '../services/reportEndorsements.js';
+import ConfirmIncidentForm from '../components/ConfirmIncidentForm.jsx';
 import Evidence from '../components/Evidence.jsx';
 import LocationMap from '../components/LocationMap.jsx';
 
@@ -15,6 +17,8 @@ export default function ReportDetailPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [confirmOpen, setConfirmOpen] = useState(Boolean(location.state?.confirm));
+  const [viewerId] = useState(() => { try { return getCurrentReporterId(); } catch { return null; } });
   useEffect(() => {
     let active = true;
     setLoading(true); setError(''); setEditing(false); setReport(null); setMessage(''); setPhotos([]);

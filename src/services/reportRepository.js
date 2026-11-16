@@ -53,24 +53,40 @@ export function validatePhotos(files) {
   const photos = Array.from(files ?? []);
   if (photos.length > 8) throw new Error('Selecciona un máximo de ocho fotografías por carga.');
   for (const photo of photos) {
-    if (!['image/jpeg', 'image/png', 'image/webp', 'image/avif'].includes(photo.type)) throw new Error('Utiliza fotografías JPG, PNG, WebP o AVIF.');
-    if (!photo.size || photo.size > 10 * 1024 * 1024) throw new Error('Cada fotografía debe ocupar entre 1 byte y 10 MB.');
+    if (!photo || !['image/jpeg', 'image/png', 'image/webp', 'image/avif'].includes(photo.type)) {
+      throw new Error('Utiliza fotografías JPG, PNG, WebP o AVIF.');
+    }
+    if (!Number.isFinite(photo.size) || photo.size <= 0 || photo.size > 10 * 1024 * 1024) {
+      throw new Error('Cada fotografía debe ocupar entre 1 byte y 10 MB.');
+    }
   }
   return photos;
 }
 
-export async function createReport({ audio, photos, position, capturedAt }) {
+// A persistent anonymous browser ID; it is not an authentication system.
+export function getCurrentReporterId() {
+  const key = 'reporte-ciudadano-participante';
+  try {
+    let id = localStorage.getItem(key);
+    if (!id) { id = crypto.randomUUID(); localStorage.setItem(key, id); }
+    return id;
+  } catch {
+    throw new Error('Para confirmar incidentes, habilita el almacenamiento del navegador.');
+  }
+}
+
+export async function createReport({ audio, photos, position, capturedAt, reporterId = null }) {
   validatePosition(position);
-  if (!audio?.size && !photos.length) throw new Error('Graba una nota de voz o adjunta una fotografía.');
   const createdAt = new Date().toISOString();
   const ticket = `RC-${crypto.randomUUID()}`;
   const report = {
     ticket, createdAt, capturedAt, updatedAt: createdAt, status: 'Registrado / Recibido',
     audio, photos, position, originalPosition: position, description: '', transcription: '',
-    category: '', references: '', receptionEvent: 'Nuevo reporte',
+    category: '', references: '', receptionEvent: 'Nuevo reporte', reporterId, confirmations: [],
     history: [{ at: createdAt, action: 'Reporte registrado' }],
   };
   await transaction('readwrite', (store) => store.add(report));
+  notifyReportCreated();
   return report;
 }
 
