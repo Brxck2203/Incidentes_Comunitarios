@@ -1,4 +1,7 @@
 import { nearbyMatches } from './reportDuplicates.js';
+import { isActiveReport } from './reportEndorsements.js';
+import { severityLevels } from './reportPriority.js';
+import { notifyReportCreated } from './reportNotifications.js';
 
 export const categories = ['Baches', 'Basura clandestina', 'Ramas/arbolado', 'Aceras dañadas'];
 
@@ -70,16 +73,17 @@ export function validatePhotos(files) {
   return photos;
 }
 
-export async function createReport({ audio, photos, position, capturedAt, category = '' }) {
+export async function createReport({ audio, photos, position, capturedAt, category = '', reporterId = null }) {
+  const checkedPhotos = validatePhotos(photos);
   validatePosition(position);
   if (category && !categories.includes(category)) throw new Error('Selecciona una categoría válida.');
-  if (!audio?.size && !photos.length) throw new Error('Graba una nota de voz o adjunta una fotografía.');
+  if (!audio?.size && !checkedPhotos.length) throw new Error('Graba una nota de voz o adjunta una fotografía.');
   const createdAt = new Date().toISOString();
   const ticket = `RC-${crypto.randomUUID()}`;
   const report = {
     ticket, createdAt, capturedAt, updatedAt: createdAt, status: 'Registrado / Recibido',
-    audio, photos, position, originalPosition: position, description: '', transcription: '',
-    category, references: '', receptionEvent: 'Nuevo reporte',
+    audio, photos: checkedPhotos, position, originalPosition: position, description: '', transcription: '',
+    category, references: '', receptionEvent: 'Nuevo reporte', reporterId, confirmations: [], severity: '',
     history: [{ at: createdAt, action: 'Reporte registrado' }],
   };
   await transaction('readwrite', (store) => store.add(report));
@@ -87,19 +91,20 @@ export async function createReport({ audio, photos, position, capturedAt, catego
   return report;
 }
 
-export function complementReport(ticket, details, photos) {
+export async function complementReport(ticket, details, photos) {
   validatePosition(details.position);
+  const checkedPhotos = validatePhotos(photos);
   if (details.category && !categories.includes(details.category)) throw new Error('Selecciona una categoría válida.');
-  return transaction('readwrite', (store, done) => {
+  const updated = await transaction('readwrite', (store, done, fail) => {
     const request = store.get(ticket);
     request.onsuccess = () => {
       const current = request.result;
-      if (!current) { request.transaction.abort(); return; }
+      if (!current) return fail('El reporte solicitado no existe.');
       const at = new Date().toISOString();
       const report = { ...current,
         category: details.category, description: details.description.trim(),
         transcription: details.transcription.trim(), references: details.references.trim(),
-        position: details.position, photos: [...current.photos, ...photos], updatedAt: at,
+        position: details.position, photos: [...(current.photos || []), ...checkedPhotos], updatedAt: at,
         receptionEvent: 'Información complementada',
         history: [...current.history, { at, action: 'Información complementada y ubicación confirmada' }],
       };
@@ -107,6 +112,8 @@ export function complementReport(ticket, details, photos) {
       done(report);
     };
   });
+  notifyReportCreated();
+  return updated;
 }
 
 // HU-06: filter on an indexed category before performing an exact geographic comparison.
@@ -118,4 +125,86 @@ export function findPotentialDuplicates(position, category, excludeTicket = null
     const request = store.index('category').getAll(category);
     request.onsuccess = () => done(nearbyMatches(request.result, position, category, excludeTicket));
   });
+}
+
+// This anonymous browser ID is for the local prototype only; it is not authentication.
+export function getCurrentReporterId() {
+  const key = 'reporte-ciudadano-participante';
+  try {
+    let id = localStorage.getItem(key);
+    if (!id) { id = crypto.randomUUID(); localStorage.setItem(key, id); }
+    return id;
+  } catch {
+    throw new Error('Para confirmar incidentes, habilita el almacenamiento del navegador.');
+  }
+}
+
+
+// HU-10: a local browser identity may endorse an active report once and subscribe to resolution.
+export async function confirmIncident(ticket, uploadedPhotos, reporterId) {
+  const photos = validatePhotos(uploadedPhotos);
+  if (!reporterId) throw new Error('No se pudo identificar este navegador.');
+  const updated = await transaction('readwrite', (store, done, fail) => {
+    const request = store.get(ticket);
+    request.onsuccess = () => {
+      const current = request.result;
+      if (!current) return fail('El reporte solicitado no existe.');
+      if (!isActiveReport(current)) return fail('Este incidente ya no admite confirmaciones.');
+      if (current.reporterId && current.reporterId === reporterId) return fail('No puedes confirmar tu propio reporte.');
+      if ((current.confirmations || []).some((entry) => entry.reporterId === reporterId)) return fail('Ya confirmaste este incidente anteriormente.');
+      const at = new Date().toISOString();
+      const report = { ...current,
+        confirmations: [...(current.confirmations || []), { reporterId, at, photos }],
+        updatedAt: at, receptionEvent: 'Confirmación ciudadana recibida',
+        history: [...current.history, { at, action: 'Incidente confirmado por otro vecino (suscripción a resolución)' }],
+      };
+      store.put(report);
+      done(report);
+    };
+  });
+  notifyReportCreated();
+  return updated;
+}
+
+export function setReportSeverity(ticket, severity) {
+  if (severity !== '' && !severityLevels.includes(severity)) throw new Error('Selecciona una severidad válida.');
+  return transaction('readwrite', (store, done, fail) => {
+    const request = store.get(ticket);
+    request.onsuccess = () => {
+      const current = request.result;
+      if (!current) return fail('El reporte solicitado no existe.');
+      if (!isActiveReport(current)) return fail('No se puede cambiar la severidad de un incidente cerrado.');
+      if ((current.severity || '') === severity) { done(current); return; }
+      const at = new Date().toISOString();
+      const report = { ...current, severity, updatedAt: at, receptionEvent: 'Severidad actualizada',
+        history: [...current.history, { at, action: `Severidad técnica asignada: ${severity || 'Sin clasificar'}` }],
+      };
+      store.put(report);
+      done(report);
+    };
+  }).then((updated) => {
+    notifyReportCreated();
+    return updated;
+  });
+}
+
+// Minimal local status transition needed to demonstrate HU-10's resolution subscriptions.
+export async function resolveIncident(ticket) {
+  const updated = await transaction('readwrite', (store, done, fail) => {
+    const request = store.get(ticket);
+    request.onsuccess = () => {
+      const current = request.result;
+      if (!current) return fail('El reporte solicitado no existe.');
+      if (!isActiveReport(current)) return fail('Este reporte ya está cerrado.');
+      const at = new Date().toISOString();
+      const report = { ...current, status: 'Resuelto', resolvedAt: at, updatedAt: at,
+        receptionEvent: 'Incidente resuelto',
+        history: [...current.history, { at, action: 'Incidente marcado como resuelto' }],
+      };
+      store.put(report);
+      done(report);
+    };
+  });
+  notifyReportCreated();
+  return updated;
 }
