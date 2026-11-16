@@ -4,6 +4,8 @@ import { getCurrentReporterId, getReports, resolveIncident, setReportSeverity } 
 import { endorsementCount, isActiveReport, priorityInfo, severityLevels, sortReceptionReports } from '../services/reportPriority.js';
 import { buildDuplicateMap } from '../services/duplicateDetection.js';
 import DuplicateBadge from '../components/DuplicateBadge.jsx';
+import { consolidateReports } from '../services/consolidationService.js';
+import ConsolidationModal from '../components/ConsolidationModal.jsx';
 import ConfirmIncidentForm from '../components/ConfirmIncidentForm.jsx';
 import IncidentMap from '../components/IncidentMap.jsx';
 import { subscribeToReportChanges } from '../services/reportNotifications.js';
@@ -17,10 +19,18 @@ export default function ReportsPage({ reception = false }) {
   const [loading, setLoading] = useState(true);
   const [savingTicket, setSavingTicket] = useState('');
   const [selectedTicket, setSelectedTicket] = useState(null);
+  const [selectedTickets, setSelectedTickets] = useState([]);
+  const [consolidating, setConsolidating] = useState(false);
+  const [busyConsolidation, setBusyConsolidation] = useState(false);
+  const [consolidationError, setConsolidationError] = useState('');
   const [reporterId] = useState(() => { try { return getCurrentReporterId(); } catch { return null; } });
   const duplicateMap = useMemo(
     () => (reception ? buildDuplicateMap(reports) : {}),
     [reception, reports],
+  );
+  const selectedReports = useMemo(
+    () => reports.filter((report) => selectedTickets.includes(report.ticket) && !report.masterTicket),
+    [reports, selectedTickets],
   );
   useEffect(() => {
     let active = true;
@@ -59,6 +69,33 @@ export default function ReportsPage({ reception = false }) {
     finally { setSavingTicket(''); }
   }
 
+  function toggleSelection(ticket) {
+    setConsolidationError('');
+    setMessage('');
+    setSelectedTickets((current) => current.includes(ticket)
+      ? current.filter((item) => item !== ticket)
+      : [...current, ticket]);
+  }
+
+  async function handleConfirmConsolidation(payload) {
+    if (busyConsolidation) return;
+    setBusyConsolidation(true);
+    setConsolidationError('');
+    setMessage('');
+    try {
+      const result = await consolidateReports(payload);
+      const updatedList = await getReports();
+      setReports(updatedList);
+      setSelectedTickets([]);
+      setConsolidating(false);
+      setMessage(`Consolidación completada en el caso maestro ${result.masterReport.ticket} (${result.secondaryReports.length} reportes secundarios enlazados).`);
+    } catch (failure) {
+      setConsolidationError(failure.message);
+    } finally {
+      setBusyConsolidation(false);
+    }
+  }
+
   const visibleReports = reception ? sortReceptionReports(reports) : reports;
   const selectedReport = reports.find((report) => report.ticket === selectedTicket);
   const confirmedByMe = (report) => Boolean(reporterId && report.confirmations?.some((item) => item.reporterId === reporterId));
@@ -70,6 +107,7 @@ export default function ReportsPage({ reception = false }) {
     {loading && <p role="status">Cargando reportes…</p>}
     {error && <p className="error-message" role="alert">{error}</p>}
     {message && <p className="success-message" role="status">{message}</p>}
+    {consolidationError && <p className="error-message" role="alert">{consolidationError}</p>}
 
     {!reception && !loading && reports.length > 0 && <>
       <h2>Incidentes abiertos en el mapa</h2>
@@ -102,13 +140,50 @@ export default function ReportsPage({ reception = false }) {
     </>}
 
     {!loading && !error && !reports.length && <p>Aún no hay reportes registrados.</p>}
+    {reception && reports.length >= 2 && <div className="consolidation-toolbar" role="region" aria-label="Herramientas de consolidación de reportes">
+      <p className="consolidation-toolbar-status">
+        {selectedReports.length === 0
+          ? 'Selecciona dos o más reportes para agruparlos en un solo caso maestro.'
+          : `${selectedReports.length} ${selectedReports.length === 1 ? 'reporte seleccionado' : 'reportes seleccionados'}.`}
+      </p>
+      <div className="consolidation-toolbar-actions">
+        <button type="button" disabled={selectedReports.length < 2 || busyConsolidation}
+          onClick={() => { setConsolidationError(''); setConsolidating(true); }}>
+          Consolidar en reporte principal
+        </button>
+        {selectedReports.length > 0 && <button type="button" className="secondary" disabled={busyConsolidation}
+          onClick={() => { setSelectedTickets([]); setConsolidating(false); setConsolidationError(''); }}>
+          Limpiar selección
+        </button>}
+      </div>
+    </div>}
+    {reception && consolidating && selectedReports.length >= 2 && <ConsolidationModal
+      selectedReports={selectedReports}
+      busy={busyConsolidation}
+      error={consolidationError}
+      onConfirm={(payload) => { void handleConfirmConsolidation(payload); }}
+      onCancel={() => { setConsolidating(false); setConsolidationError(''); }}
+    />}
     <ul className="report-list">{visibleReports.map((report) => {
       const info = priorityInfo(report);
       const duplicateInfo = reception ? duplicateMap[report.ticket] : null;
       const isDuplicate = Boolean(duplicateInfo?.isSuspectedDuplicate);
-      return <li key={report.ticket} className={`report-card ${isDuplicate ? 'report-card-duplicate' : ''}`}>
+      const isSecondary = Boolean(report.masterTicket);
+      const isMaster = Array.isArray(report.secondaryTickets) && report.secondaryTickets.length > 0;
+      const isChecked = selectedTickets.includes(report.ticket);
+      return <li key={report.ticket} className={`report-card ${isDuplicate ? 'report-card-duplicate' : ''} ${isMaster ? 'report-card-master' : ''} ${isSecondary ? 'report-card-secondary' : ''}`}>
         <div className="report-card-header">
+          {reception && <label className="report-select-checkbox">
+            <input type="checkbox" checked={isChecked} disabled={isSecondary || busyConsolidation}
+              onChange={() => toggleSelection(report.ticket)}
+              aria-label={`Seleccionar reporte ${report.ticket} para consolidar`} />
+            <span>Seleccionar</span>
+          </label>}
           <Link to={`/reportes/${report.ticket}`} state={reception ? { fromReception: true } : undefined}>{report.ticket}</Link>
+          {isMaster && <span className="consolidation-status-badge master-badge">
+            Caso maestro ({report.secondaryTickets.length} {report.secondaryTickets.length === 1 ? 'unificado' : 'unificados'})
+          </span>}
+          {isSecondary && <span className="consolidation-status-badge secondary-badge">Consolidado en {report.masterTicket}</span>}
           {isDuplicate && <DuplicateBadge match={duplicateInfo.primaryMatch} count={duplicateInfo.matches.length} />}
         </div>
         <p>{report.category || 'Sin clasificar'} · {report.status}</p>

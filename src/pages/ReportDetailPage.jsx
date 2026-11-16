@@ -6,6 +6,7 @@ import { detectDuplicatesForTicket } from '../services/duplicateDetection.js';
 import DuplicateWarning from '../components/DuplicateWarning.jsx';
 import DuplicateComparisonPanel from '../components/DuplicateComparisonPanel.jsx';
 import ConfirmIncidentForm from '../components/ConfirmIncidentForm.jsx';
+import ConsolidatedEvidenceSection from '../components/ConsolidatedEvidenceSection.jsx';
 import Evidence from '../components/Evidence.jsx';
 import LocationMap from '../components/LocationMap.jsx';
 
@@ -154,6 +155,12 @@ export default function ReportDetailPage() {
     <p className="ticket">{report.ticket}</p>
     <p>{report.status} · {new Date(report.createdAt).toLocaleString('es-CR')}</p>
     <p>Última actualización: {new Date(report.updatedAt).toLocaleString('es-CR')}</p>
+    {report.masterTicket && <p className="consolidated-secondary-banner" role="status">
+      Este reporte está enlazado como solicitud secundaria al expediente principal{' '}
+      <Link to={`/reportes/${report.masterTicket}`} state={{ fromReception }}>
+        <strong>{report.masterTicket}</strong>
+      </Link>.
+    </p>}
     {error && <p className="error-message" role="alert">{error}</p>}
     {message && <p className="success-message" role="status">{message}</p>}
     {duplicateLoading && <p role="status">Verificando posibles reportes duplicados…</p>}
@@ -170,6 +177,7 @@ export default function ReportDetailPage() {
       <p role="status">No se encontraron posibles reportes duplicados.</p>
     )}
     <h2>Evidencias</h2><Evidence audio={report.audio} photos={report.photos || []} />
+    <ConsolidatedEvidenceSection report={report} />
     {report.confirmations?.some((confirmation) => confirmation.photos?.length > 0) && <>
       <h3>Fotografías complementarias de vecinos</h3>
       <Evidence photos={report.confirmations.flatMap((confirmation) => confirmation.photos || [])} />
