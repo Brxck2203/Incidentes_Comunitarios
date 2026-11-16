@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { categories, complementReport, findPotentialDuplicates, getCurrentReporterId, getReport, validatePhotos } from '../services/reportRepository.js';
+import { categories, complementReport, findPotentialDuplicates, getCurrentReporterId, validatePhotos } from '../services/reportRepository.js';
+import { getConsolidatedTrackingForTicket } from '../services/consolidatedTracking.js';
 import { endorsementCount, isActiveReport } from '../services/reportPriority.js';
 import { detectDuplicatesForTicket } from '../services/duplicateDetection.js';
 import DuplicateWarning from '../components/DuplicateWarning.jsx';
 import DuplicateComparisonPanel from '../components/DuplicateComparisonPanel.jsx';
 import ConfirmIncidentForm from '../components/ConfirmIncidentForm.jsx';
 import ConsolidatedEvidenceSection from '../components/ConsolidatedEvidenceSection.jsx';
+import JointAttentionPanel from '../components/JointAttentionPanel.jsx';
 import Evidence from '../components/Evidence.jsx';
 import LocationMap from '../components/LocationMap.jsx';
 
@@ -15,6 +17,7 @@ export default function ReportDetailPage() {
   const location = useLocation();
   const fromReception = Boolean(location.state?.fromReception);
   const [report, setReport] = useState(null);
+  const [tracking, setTracking] = useState(null);
   const [draft, setDraft] = useState(null);
   const [photos, setPhotos] = useState([]);
   const [editing, setEditing] = useState(false);
@@ -53,10 +56,23 @@ export default function ReportDetailPage() {
     setMessage(''); setPhotos([]); setPhotoSelectionNotice('');
     setConfirmOpen(Boolean(location.state?.confirm));
     setPendingEdit(null); setNearbyDraftMatches([]);
-    getReport(ticket).then((value) => { if (active) setReport(value); })
-      .catch((failure) => { if (active) setError(failure.message); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
+    async function loadTracking() {
+      try {
+        const result = await getConsolidatedTrackingForTicket(ticket);
+        if (active) {
+          setReport(result.report);
+          setTracking(result.tracking);
+          setError('');
+        }
+      } catch (failure) {
+        if (active) setError(failure.message);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    void loadTracking();
+    window.addEventListener('focus', loadTracking);
+    return () => { active = false; window.removeEventListener('focus', loadTracking); };
   }, [ticket, location.state?.confirm]);
   useEffect(() => {
     if (!report?.ticket) return undefined;
@@ -153,8 +169,9 @@ export default function ReportDetailPage() {
     <h1>Detalle del reporte</h1>
     {location.state?.created && <p className="success-message" role="status">Reporte guardado. Conserva tu código de seguimiento.</p>}
     <p className="ticket">{report.ticket}</p>
-    <p>{report.status} · {new Date(report.createdAt).toLocaleString('es-CR')}</p>
-    <p>Última actualización: {new Date(report.updatedAt).toLocaleString('es-CR')}</p>
+    <p>{tracking?.effectiveStatus ?? report.status} · {new Date(report.createdAt).toLocaleString('es-CR')}</p>
+    <p>Última actualización: {new Date(tracking?.effectiveUpdatedAt ?? report.updatedAt).toLocaleString('es-CR')}</p>
+    <JointAttentionPanel tracking={tracking} />
     {report.masterTicket && <p className="consolidated-secondary-banner" role="status">
       Este reporte está enlazado como solicitud secundaria al expediente principal{' '}
       <Link to={`/reportes/${report.masterTicket}`} state={{ fromReception }}>
@@ -163,6 +180,7 @@ export default function ReportDetailPage() {
     </p>}
     {error && <p className="error-message" role="alert">{error}</p>}
     {message && <p className="success-message" role="status">{message}</p>}
+    <JointAttentionPanel tracking={tracking} />
     {duplicateLoading && <p role="status">Verificando posibles reportes duplicados…</p>}
     {duplicateStateCurrent && duplicateResult.error && <p className="error-message" role="alert">{duplicateResult.error}</p>}
     {duplicateStateCurrent && duplicateResult.info.isSuspectedDuplicate && (

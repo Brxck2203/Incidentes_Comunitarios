@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getCurrentReporterId, getReports, resolveIncident, setReportSeverity } from '../services/reportRepository.js';
+import { resolveReportsListTracking } from '../services/consolidatedTracking.js';
 import { endorsementCount, isActiveReport, priorityInfo, severityLevels, sortReceptionReports } from '../services/reportPriority.js';
 import { buildDuplicateMap } from '../services/duplicateDetection.js';
 import DuplicateBadge from '../components/DuplicateBadge.jsx';
@@ -14,6 +15,7 @@ const severityStyle = { Leve: 'mild', Moderado: 'moderate', Grave: 'serious', Cr
 
 export default function ReportsPage({ reception = false }) {
   const [reports, setReports] = useState([]);
+  const [ticketQuery, setTicketQuery] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
@@ -32,6 +34,7 @@ export default function ReportsPage({ reception = false }) {
     () => reports.filter((report) => selectedTickets.includes(report.ticket) && !report.masterTicket),
     [reports, selectedTickets],
   );
+  const trackingMap = useMemo(() => resolveReportsListTracking(reports), [reports]);
   useEffect(() => {
     let active = true;
     async function refresh() {
@@ -96,7 +99,12 @@ export default function ReportsPage({ reception = false }) {
     }
   }
 
-  const visibleReports = reception ? sortReceptionReports(reports) : reports;
+  const orderedReports = reception ? sortReceptionReports(reports) : reports;
+  const visibleReports = useMemo(() => {
+    if (reception) return orderedReports;
+    const query = ticketQuery.trim().toLowerCase();
+    return query ? orderedReports.filter((item) => item.ticket.toLowerCase().includes(query)) : orderedReports;
+  }, [orderedReports, reception, ticketQuery]);
   const selectedReport = reports.find((report) => report.ticket === selectedTicket);
   const confirmedByMe = (report) => Boolean(reporterId && report.confirmations?.some((item) => item.reporterId === reporterId));
   const subscriptions = reception ? [] : reports.filter(confirmedByMe);
@@ -104,6 +112,11 @@ export default function ReportsPage({ reception = false }) {
 
   return <section>
     <h1>{reception ? 'Recepción de reportes' : 'Mis reportes'}</h1>
+    {!reception && reports.length > 0 && <label className="ticket-search-box">
+      Consultar por número de ticket
+      <input type="search" placeholder="Ejemplo: RC-..." value={ticketQuery}
+        onChange={(event) => setTicketQuery(event.target.value)} />
+    </label>}
     {loading && <p role="status">Cargando reportes…</p>}
     {error && <p className="error-message" role="alert">{error}</p>}
     {message && <p className="success-message" role="status">{message}</p>}
@@ -140,6 +153,9 @@ export default function ReportsPage({ reception = false }) {
     </>}
 
     {!loading && !error && !reports.length && <p>Aún no hay reportes registrados.</p>}
+    {!loading && !error && reports.length > 0 && !visibleReports.length && (
+      <p role="status">No se encontró ningún reporte que coincida con el ticket ingresado.</p>
+    )}
     {reception && reports.length >= 2 && <div className="consolidation-toolbar" role="region" aria-label="Herramientas de consolidación de reportes">
       <p className="consolidation-toolbar-status">
         {selectedReports.length === 0
@@ -171,7 +187,10 @@ export default function ReportsPage({ reception = false }) {
       const isSecondary = Boolean(report.masterTicket);
       const isMaster = Array.isArray(report.secondaryTickets) && report.secondaryTickets.length > 0;
       const isChecked = selectedTickets.includes(report.ticket);
-      return <li key={report.ticket} className={`report-card ${isDuplicate ? 'report-card-duplicate' : ''} ${isMaster ? 'report-card-master' : ''} ${isSecondary ? 'report-card-secondary' : ''}`}>
+      const tracking = trackingMap[report.ticket];
+      const isConsolidated = Boolean(tracking?.isConsolidatedSecondary);
+      const effectiveStatus = tracking?.effectiveStatus ?? report.status;
+      return <li key={report.ticket} className={`report-card ${isDuplicate ? 'report-card-duplicate' : ''} ${isMaster ? 'report-card-master' : ''} ${isSecondary ? 'report-card-secondary' : ''} ${isConsolidated && !reception ? 'report-card-joint' : ''}`}>
         <div className="report-card-header">
           {reception && <label className="report-select-checkbox">
             <input type="checkbox" checked={isChecked} disabled={isSecondary || busyConsolidation}
@@ -184,9 +203,15 @@ export default function ReportsPage({ reception = false }) {
             Caso maestro ({report.secondaryTickets.length} {report.secondaryTickets.length === 1 ? 'unificado' : 'unificados'})
           </span>}
           {isSecondary && <span className="consolidation-status-badge secondary-badge">Consolidado en {report.masterTicket}</span>}
+          {isConsolidated && !reception && <span className="joint-attention-badge">Atención conjunta ({tracking.masterTicket})</span>}
           {isDuplicate && <DuplicateBadge match={duplicateInfo.primaryMatch} count={duplicateInfo.matches.length} />}
         </div>
-        <p>{report.category || 'Sin clasificar'} · {report.status}</p>
+        <p>{report.category || 'Sin clasificar'} · {effectiveStatus}</p>
+        {isConsolidated && !reception && (tracking.masterUnavailable
+          ? <p className="error-message" role="alert">{tracking.masterUnavailableReason} Se muestra el estado registrado en este ticket.</p>
+          : <p className="joint-attention-card-note" role="status">
+            Avance del expediente maestro: <strong>{tracking.effectiveStatus}</strong>
+          </p>)}
         <p>{new Date(report.createdAt).toLocaleString('es-CR')}</p>
         {endorsementCount(report) > 0 && <p>Vecinos que confirman el incidente: <strong>{endorsementCount(report)}</strong></p>}
         {reception && <>
