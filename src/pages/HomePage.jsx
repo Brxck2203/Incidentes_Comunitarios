@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import useAudioRecorder from '../hooks/useAudioRecorder.js';
-import { createReport, validatePhotos } from '../services/reportRepository.js';
+import { createReport, getCurrentReporterId, validatePhotos } from '../services/reportRepository.js';
 import { getCurrentPosition } from '../services/geolocation.js';
 import Evidence from '../components/Evidence.jsx';
 
@@ -43,45 +43,58 @@ export default function HomePage() {
   const [busy, setBusy] = useState(false);
   const capturedAt = useRef(null);
   const publishing = useRef(false);
+  const active = useRef(true);
   const cameraInputRef = useRef(null);
   const navigate = useNavigate();
 
-  async function publishReport({ audioBlob, photoList } = {}) {
-    if (publishing.current) return;
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
+
+  async function publishReport({ audioBlob, photoList, stopReason = 'send' } = {}) {
+    if (publishing.current || !active.current) return;
     publishing.current = true;
     setBusy(true);
     setError('');
     const recordTime = capturedAt.current || getTimestamp();
+    const photosToSend = photoList !== undefined ? photoList : photos;
     try {
-      const positionPromise = getCurrentPosition().then((value) => ({ value }), (failure) => ({ failure }));
-      const audio = audioBlob !== undefined ? audioBlob : (voice.recording ? await voice.stop() : voice.audio);
-      const photosToSend = photoList !== undefined ? photoList : photos;
-      const location = await positionPromise;
-      if (location.failure) throw location.failure;
+      const audio = audioBlob !== undefined
+        ? audioBlob
+        : (voice.recording ? await voice.stop(stopReason) : voice.audio);
+      if (!active.current) return;
+      if (!audio?.size && !photosToSend.length) {
+        setError('La grabación no generó audio. Vuelve a grabar antes de publicar.');
+        return;
+      }
+      const position = await getCurrentPosition();
+      if (!active.current) return;
+      let reporterId = null;
+      try { reporterId = getCurrentReporterId(); } catch { /* Basic reporting remains available. */ }
       const report = await createReport({
         audio,
         photos: photosToSend,
-        position: location.value,
+        position,
         capturedAt: recordTime,
+        reporterId,
       });
+      if (!active.current) return;
       navigate(`/reportes/${report.ticket}`, { state: { created: true } });
     } catch (failure) {
-      setError(failure.message);
+      if (active.current) setError(failure.message);
     } finally {
       publishing.current = false;
-      setBusy(false);
+      if (active.current) setBusy(false);
     }
   }
 
   const voice = useAudioRecorder({
-    onTimeout: async (recordedBlob) => {
-      if (recordedBlob) {
-        await publishReport({ audioBlob: recordedBlob });
-      }
-    },
+    onTimeout: (recordedBlob) => publishReport({ audioBlob: recordedBlob, stopReason: 'timeout' }),
   });
 
   async function handleCameraCapture(event) {
+    if (!active.current) return;
     setError('');
     const files = event.target.files;
     if (!files || files.length === 0) return;
@@ -93,28 +106,32 @@ export default function HomePage() {
         await publishReport({ photoList: selected });
       }
     } catch (failure) {
-      setError(failure.message);
+      if (active.current) setError(failure.message);
     } finally {
       event.target.value = '';
     }
   }
 
   function openCamera() {
-    if (busy || voice.starting) return;
+    if (publishing.current || busy || voice.starting) return;
     cameraInputRef.current?.click();
   }
 
   async function handleMicClick() {
-    if (busy || voice.starting) return;
+    if (publishing.current || busy || voice.starting) return;
     if (voice.recording) {
-      const audioBlob = await voice.stop();
-      if (audioBlob) {
-        await publishReport({ audioBlob });
-      }
+      await publishReport({ stopReason: 'send' });
     } else {
       capturedAt.current = getTimestamp();
+      setError('');
       await voice.start();
     }
+  }
+
+  function stopForReview() {
+    void voice.stop('review').catch((failure) => {
+      if (active.current) setError(failure.message);
+    });
   }
 
   return (
@@ -199,7 +216,7 @@ export default function HomePage() {
             <button
               type="button"
               className="secondary"
-              onClick={() => { void voice.stop(); }}
+              onClick={stopForReview}
               disabled={busy}
             >
               Detener y escuchar primero

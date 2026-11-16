@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { categories, getReport, complementReport, validatePhotos } from '../services/reportRepository.js';
+import { categories, getReport, complementReport, getCurrentReporterId, validatePhotos } from '../services/reportRepository.js';
+import { endorsementCount, isActiveReport } from '../services/reportEndorsements.js';
+import ConfirmIncidentForm from '../components/ConfirmIncidentForm.jsx';
 import Evidence from '../components/Evidence.jsx';
 import LocationMap from '../components/LocationMap.jsx';
 
@@ -15,6 +17,8 @@ export default function ReportDetailPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [confirmOpen, setConfirmOpen] = useState(Boolean(location.state?.confirm));
+  const [viewerId] = useState(() => { try { return getCurrentReporterId(); } catch { return null; } });
   useEffect(() => {
     let active = true;
     setLoading(true); setError(''); setEditing(false); setReport(null); setMessage(''); setPhotos([]);
@@ -46,6 +50,21 @@ export default function ReportDetailPage() {
     {error && <p className="error-message" role="alert">{error}</p>}
     {message && <p className="success-message" role="status">{message}</p>}
     <h2>Evidencias</h2><Evidence audio={report.audio} photos={report.photos} />
+    <p>Vecinos que han confirmado este incidente: <strong>{endorsementCount(report)}</strong></p>
+    {report.confirmations?.some((entry) => entry.photos?.length > 0) && <>
+      <h3>Fotografías complementarias de vecinos</h3>
+      <Evidence photos={report.confirmations.flatMap((entry) => entry.photos || [])} />
+    </>}
+    {isActiveReport(report) && !editing && <div className="confirm-section">
+      {report.confirmations?.some((entry) => entry.reporterId === viewerId)
+        ? <p role="status">Ya confirmaste el incidente. Estás suscrito a las notificaciones de resolución.</p>
+        : report.reporterId && report.reporterId === viewerId
+          ? <p>Este es tu reporte. No puedes confirmarlo como otro vecino.</p>
+          : confirmOpen
+            ? <ConfirmIncidentForm ticket={ticket} onCancel={() => setConfirmOpen(false)}
+                onConfirmed={(updated) => { setReport(updated); setConfirmOpen(false); setMessage('Confirmación guardada. Estás suscrito a la resolución.'); }} />
+            : <button type="button" className="secondary" onClick={() => setConfirmOpen(true)}>Confirmar incidente</button>}
+    </div>}
     {editing ? <form onSubmit={save}>
       <h2>Agregar más detalles</h2>
       <label>Categoría<select value={draft.category} onChange={(event) => field('category', event.target.value)} disabled={busy}>

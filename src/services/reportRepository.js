@@ -1,3 +1,5 @@
+import { isActiveReport } from './reportEndorsements.js';
+
 export const categories = ['Baches', 'Basura clandestina', 'Ramas/arbolado', 'Aceras dañadas'];
 
 function openDatabase() {
@@ -16,11 +18,13 @@ async function transaction(mode, action) {
   return new Promise((resolve, reject) => {
     const tx = database.transaction('reports', mode);
     let result;
+    let reason;
     tx.oncomplete = () => { database.close(); resolve(result); };
-    tx.onabort = () => { database.close(); reject(new Error('No se pudo guardar o consultar el reporte. Revisa el espacio disponible e inténtalo de nuevo.')); };
+    tx.onabort = () => { database.close(); reject(reason || new Error('No se pudo guardar o consultar el reporte. Revisa el espacio disponible e inténtalo de nuevo.')); };
     tx.onerror = () => {};
-    try { action(tx.objectStore('reports'), (value) => { result = value; }); }
-    catch (error) { tx.abort(); reject(error); }
+    const fail = (message) => { reason = new Error(message); tx.abort(); };
+    try { action(tx.objectStore('reports'), (value) => { result = value; }, fail); }
+    catch (error) { reason = error; tx.abort(); }
   });
 }
 
@@ -55,7 +59,19 @@ export function validatePhotos(files) {
   return photos;
 }
 
-export async function createReport({ audio, photos, position, capturedAt }) {
+// A persistent anonymous browser ID; it is not an authentication system.
+export function getCurrentReporterId() {
+  const key = 'reporte-ciudadano-participante';
+  try {
+    let id = localStorage.getItem(key);
+    if (!id) { id = crypto.randomUUID(); localStorage.setItem(key, id); }
+    return id;
+  } catch {
+    throw new Error('Para confirmar incidentes, habilita el almacenamiento del navegador.');
+  }
+}
+
+export async function createReport({ audio, photos, position, capturedAt, reporterId = null }) {
   validatePosition(position);
   if (!audio?.size && !photos.length) throw new Error('Graba una nota de voz o adjunta una fotografía.');
   const createdAt = new Date().toISOString();
@@ -63,7 +79,7 @@ export async function createReport({ audio, photos, position, capturedAt }) {
   const report = {
     ticket, createdAt, capturedAt, updatedAt: createdAt, status: 'Registrado / Recibido',
     audio, photos, position, originalPosition: position, description: '', transcription: '',
-    category: '', references: '', receptionEvent: 'Nuevo reporte',
+    category: '', references: '', receptionEvent: 'Nuevo reporte', reporterId, confirmations: [],
     history: [{ at: createdAt, action: 'Reporte registrado' }],
   };
   await transaction('readwrite', (store) => store.add(report));
@@ -88,6 +104,46 @@ export function complementReport(ticket, details, photos) {
       };
       store.put(report);
       done(report);
+    };
+  });
+}
+
+// HU-10: atomic, one-per-browser confirmation with evidence and resolution subscription.
+export function confirmIncident(ticket, uploadedPhotos, reporterId) {
+  const photos = validatePhotos(uploadedPhotos);
+  if (!reporterId) throw new Error('No se pudo identificar este navegador.');
+  return transaction('readwrite', (store, done, fail) => {
+    const request = store.get(ticket);
+    request.onsuccess = () => {
+      const current = request.result;
+      if (!current) return fail('El reporte solicitado no existe.');
+      if (!isActiveReport(current)) return fail('Este incidente ya no admite confirmaciones.');
+      if (current.reporterId && current.reporterId === reporterId) return fail('No puedes confirmar tu propio reporte.');
+      if ((current.confirmations || []).some((entry) => entry.reporterId === reporterId)) return fail('Ya confirmaste este incidente anteriormente.');
+      const at = new Date().toISOString();
+      const report = { ...current,
+        confirmations: [...(current.confirmations || []), { reporterId, at, photos }],
+        updatedAt: at, receptionEvent: 'Confirmación ciudadana recibida',
+        history: [...current.history, { at, action: 'Incidente confirmado por otro vecino (suscripción a resolución)' }],
+      };
+      store.put(report); done(report);
+    };
+  });
+}
+
+export function resolveIncident(ticket) {
+  return transaction('readwrite', (store, done, fail) => {
+    const request = store.get(ticket);
+    request.onsuccess = () => {
+      const current = request.result;
+      if (!current) return fail('El reporte solicitado no existe.');
+      if (!isActiveReport(current)) return fail('Este reporte ya está cerrado.');
+      const at = new Date().toISOString();
+      const report = { ...current, status: 'Resuelto', resolvedAt: at, updatedAt: at,
+        receptionEvent: 'Incidente resuelto',
+        history: [...current.history, { at, action: 'Incidente marcado como resuelto' }],
+      };
+      store.put(report); done(report);
     };
   });
 }
