@@ -146,3 +146,12 @@ audio { width: 100%; min-height: 48px; margin-top: 1rem; }
 .text-link { display: inline-flex; align-items: center; min-height: 48px; }
 .skip-link { position: absolute; left: 1rem; top: -10rem; padding: .75rem; background: white; z-index: 10000; }
 .skip-link:focus { top: 1rem; }
+
+/* HU-06: preventive duplicate alert and category selector. */
+.report-category-field { margin: 0 0 1rem; max-width: 520px; }
+.field-help { font-size: .88rem; font-weight: 400; color: #344e68; }
+.duplicate-warning { margin: 1.25rem 0; padding: 1.25rem; border: 2px solid #ac6700; border-radius: .65rem; background: #fff8e9; }
+.duplicate-warning h2 { margin-top: 0; }
+.duplicate-warning ul, .duplicate-hint ul { padding-left: 1.5rem; overflow-wrap: anywhere; }
+.duplicate-warning li, .duplicate-hint li { margin: .5rem 0; }
+.duplicate-hint { padding: 1rem; margin: 1rem 0; border-left: 4px solid #a76806; background: #fff8e9; }

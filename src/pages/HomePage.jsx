@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import useAudioRecorder from '../hooks/useAudioRecorder.js';
-import { createReport, validatePhotos } from '../services/reportRepository.js';
+import { categories, createReport, findPotentialDuplicates, validatePhotos } from '../services/reportRepository.js';
+import DuplicateWarning from '../components/DuplicateWarning.jsx';
 import { getCurrentPosition } from '../services/geolocation.js';
 import Evidence from '../components/Evidence.jsx';
 
@@ -39,49 +40,74 @@ function getTimestamp() {
 
 export default function HomePage() {
   const [photos, setPhotos] = useState([]);
+  const [category, setCategory] = useState('');
+  const [pendingReport, setPendingReport] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const capturedAt = useRef(null);
   const publishing = useRef(false);
+  const active = useRef(true);
   const cameraInputRef = useRef(null);
   const navigate = useNavigate();
 
-  async function publishReport({ audioBlob, photoList } = {}) {
-    if (publishing.current) return;
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
+
+  async function persistReport(payload) {
+    const report = await createReport(payload);
+    if (active.current) navigate(`/reportes/${report.ticket}`, { state: { created: true } });
+  }
+
+  async function continuePending() {
+    if (publishing.current || !pendingReport) return;
+    publishing.current = true; setBusy(true); setError('');
+    try { await persistReport(pendingReport); if (active.current) setPendingReport(null); }
+    catch (failure) { if (active.current) setError(failure.message); }
+    finally { publishing.current = false; if (active.current) setBusy(false); }
+  }
+
+  async function publishReport({ audioBlob, photoList, stopReason = 'send' } = {}) {
+    if (publishing.current || !active.current || pendingReport) return;
     publishing.current = true;
     setBusy(true);
     setError('');
     const recordTime = capturedAt.current || getTimestamp();
+    const photosToSend = photoList !== undefined ? photoList : photos;
     try {
-      const positionPromise = getCurrentPosition().then((value) => ({ value }), (failure) => ({ failure }));
-      const audio = audioBlob !== undefined ? audioBlob : (voice.recording ? await voice.stop() : voice.audio);
-      const photosToSend = photoList !== undefined ? photoList : photos;
-      const location = await positionPromise;
-      if (location.failure) throw location.failure;
-      const report = await createReport({
-        audio,
-        photos: photosToSend,
-        position: location.value,
-        capturedAt: recordTime,
-      });
-      navigate(`/reportes/${report.ticket}`, { state: { created: true } });
+      const audio = audioBlob !== undefined
+        ? audioBlob
+        : (voice.recording ? await voice.stop(stopReason) : voice.audio);
+      if (!active.current) return;
+      if (!audio?.size && !photosToSend.length) {
+        setError('La grabación no generó audio. Vuelve a grabar antes de publicar.');
+        return;
+      }
+      const position = await getCurrentPosition();
+      if (!active.current) return;
+      const payload = { audio, photos: photosToSend, position, capturedAt: recordTime, category };
+      const matches = category ? await findPotentialDuplicates(position, category) : [];
+      if (!active.current) return;
+      if (matches.length) {
+        setPendingReport({ ...payload, matches });
+        return;
+      }
+      await persistReport(payload);
     } catch (failure) {
-      setError(failure.message);
+      if (active.current) setError(failure.message);
     } finally {
       publishing.current = false;
-      setBusy(false);
+      if (active.current) setBusy(false);
     }
   }
 
   const voice = useAudioRecorder({
-    onTimeout: async (recordedBlob) => {
-      if (recordedBlob) {
-        await publishReport({ audioBlob: recordedBlob });
-      }
-    },
+    onTimeout: (recordedBlob) => publishReport({ audioBlob: recordedBlob, stopReason: 'timeout' }),
   });
 
   async function handleCameraCapture(event) {
+    if (!active.current) return;
     setError('');
     const files = event.target.files;
     if (!files || files.length === 0) return;
@@ -93,28 +119,32 @@ export default function HomePage() {
         await publishReport({ photoList: selected });
       }
     } catch (failure) {
-      setError(failure.message);
+      if (active.current) setError(failure.message);
     } finally {
       event.target.value = '';
     }
   }
 
   function openCamera() {
-    if (busy || voice.starting) return;
+    if (publishing.current || busy || voice.starting || pendingReport) return;
     cameraInputRef.current?.click();
   }
 
   async function handleMicClick() {
-    if (busy || voice.starting) return;
+    if (publishing.current || busy || voice.starting || pendingReport) return;
     if (voice.recording) {
-      const audioBlob = await voice.stop();
-      if (audioBlob) {
-        await publishReport({ audioBlob });
-      }
+      await publishReport({ stopReason: 'send' });
     } else {
       capturedAt.current = getTimestamp();
+      setError('');
       await voice.start();
     }
+  }
+
+  function stopForReview() {
+    void voice.stop('review').catch((failure) => {
+      if (active.current) setError(failure.message);
+    });
   }
 
   return (
@@ -127,7 +157,7 @@ export default function HomePage() {
         <button
           type="button"
           className={`capture-action-card mic-card ${voice.recording ? 'recording-active' : ''}`}
-          disabled={busy || voice.starting}
+          disabled={busy || voice.starting || Boolean(pendingReport)}
           onClick={() => { void handleMicClick(); }}
           aria-label={voice.recording ? 'Detener grabación y enviar reporte' : 'Grabar nota de voz y enviar al instante'}
         >
@@ -151,7 +181,7 @@ export default function HomePage() {
         <button
           type="button"
           className="capture-action-card camera-card"
-          disabled={busy || voice.starting || voice.recording}
+          disabled={busy || voice.starting || voice.recording || Boolean(pendingReport)}
           onClick={openCamera}
           aria-label="Tomar fotografía con la cámara y enviar al instante"
         >
@@ -176,6 +206,18 @@ export default function HomePage() {
         />
       </div>
 
+      <label className="report-category-field">Categoría del incidente (opcional)
+        <select value={category} disabled={busy || Boolean(pendingReport)} onChange={(event) => setCategory(event.target.value)}>
+          <option value="">Seleccionar después</option>
+          {categories.map((value) => <option key={value} value={value}>{value}</option>)}
+        </select>
+        <span className="field-help">Seleccionarla permite detectar reportes cercanos antes de enviarlo. Puedes seguir reportando sin elegirla.</span>
+      </label>
+
+      {pendingReport && <DuplicateWarning matches={pendingReport.matches} busy={busy}
+        onContinue={() => { void continuePending(); }}
+        onCancel={() => { setPendingReport(null); setError(''); }} />}
+
       {busy && (
         <div className="sending-indicator" role="status" aria-live="polite">
           <span className="spinner" aria-hidden="true" />
@@ -199,7 +241,7 @@ export default function HomePage() {
             <button
               type="button"
               className="secondary"
-              onClick={() => { void voice.stop(); }}
+              onClick={stopForReview}
               disabled={busy}
             >
               Detener y escuchar primero
@@ -215,7 +257,7 @@ export default function HomePage() {
       <button
         className="publish-button"
         type="button"
-        disabled={busy || voice.starting || (!voice.recording && !voice.audio && !photos.length)}
+        disabled={busy || voice.starting || Boolean(pendingReport) || (!voice.recording && !voice.audio && !photos.length)}
         onClick={() => { void publishReport(); }}
       >
         {busy ? 'Obteniendo ubicación y guardando…' : 'Publicar reporte'}
