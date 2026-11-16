@@ -1,7 +1,5 @@
 import { getReport } from './reportRepository.js';
-
-// TODO: se alimenta de los vínculos masterTicket/consolidation creados al integrar HU-08
-// TODO: refleja automáticamente los cambios de estado y resoluciones cuando se integren HU-11, HU-12 y HU-13
+import { toPublicMunicipalDecision } from './municipalDecisions.js';
 
 /**
  * Sanea una entrada de la bitácora del caso maestro para mostrar únicamente el avance operativo
@@ -36,6 +34,7 @@ export function resolveReportTracking(report, reportsByTicket = {}) {
     : (report.consolidation?.role === 'secondary' && report.consolidation?.masterTicket
         ? String(report.consolidation.masterTicket).trim()
         : '');
+  const hasMasterRelation = Boolean(report.masterTicket || report.consolidation?.role === 'secondary');
 
   if (masterTicket === report.ticket) {
     return {
@@ -45,15 +44,32 @@ export function resolveReportTracking(report, reportsByTicket = {}) {
       masterAvailable: false,
       masterUnavailable: true,
       masterUnavailableReason: 'El ticket original no puede ser también su propio expediente maestro.',
-      effectiveStatus: report.status,
-      effectiveUpdatedAt: report.updatedAt,
+      effectiveStatus: null,
+      effectiveUpdatedAt: null,
       effectiveCategory: report.category,
+      effectiveDecision: null,
       consolidatedAt: report.consolidation?.consolidatedAt ?? report.updatedAt,
       masterProgressHistory: [],
     };
   }
 
   if (!masterTicket) {
+    if (hasMasterRelation) {
+      return {
+        ticket: report.ticket,
+        isConsolidatedSecondary: true,
+        masterTicket: null,
+        masterAvailable: false,
+        masterUnavailable: true,
+        masterUnavailableReason: 'No se pudo determinar el ticket del expediente maestro.',
+        effectiveStatus: null,
+        effectiveUpdatedAt: null,
+        effectiveCategory: report.category,
+        effectiveDecision: null,
+        consolidatedAt: report.consolidation?.consolidatedAt ?? report.updatedAt,
+        masterProgressHistory: [],
+      };
+    }
     return {
       ticket: report.ticket,
       isConsolidatedSecondary: false,
@@ -64,6 +80,7 @@ export function resolveReportTracking(report, reportsByTicket = {}) {
       effectiveStatus: report.status,
       effectiveUpdatedAt: report.updatedAt,
       effectiveCategory: report.category,
+      effectiveDecision: toPublicMunicipalDecision(report.municipalDecision),
       consolidatedAt: null,
       masterProgressHistory: [],
     };
@@ -79,9 +96,10 @@ export function resolveReportTracking(report, reportsByTicket = {}) {
       masterAvailable: false,
       masterUnavailable: true,
       masterUnavailableReason: 'No se encontró el expediente maestro.',
-      effectiveStatus: report.status,
-      effectiveUpdatedAt: report.updatedAt,
+      effectiveStatus: null,
+      effectiveUpdatedAt: null,
       effectiveCategory: report.category,
+      effectiveDecision: null,
       consolidatedAt: report.consolidation?.consolidatedAt ?? report.updatedAt,
       masterProgressHistory: [],
     };
@@ -102,6 +120,7 @@ export function resolveReportTracking(report, reportsByTicket = {}) {
     effectiveStatus: masterReport.status,
     effectiveUpdatedAt: masterReport.updatedAt,
     effectiveCategory: masterReport.category || report.category,
+    effectiveDecision: toPublicMunicipalDecision(masterReport.municipalDecision),
     consolidatedAt: report.consolidation?.consolidatedAt ?? report.updatedAt,
     masterProgressHistory,
   };

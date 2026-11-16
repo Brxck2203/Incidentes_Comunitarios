@@ -249,3 +249,44 @@ audio { width: 100%; min-height: 48px; margin-top: 1rem; }
 .joint-attention-panel h3 { margin: 1rem 0 .5rem; font-size: 1.05rem; }
 .joint-attention-timeline { margin: 0; padding-left: 1.25rem; }
 .joint-attention-timeline li { margin: .4rem 0; }
+
+/* HU-11: synchronized municipal list and map. */
+.municipal-console-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: .75rem; margin: 1rem 0; padding: 1rem; border: 1px solid #94a3b8; border-radius: .75rem; background: #fff; }
+.municipal-console-filters legend { padding: 0 .4rem; font-weight: 750; }
+.municipal-console-filters label { margin: 0; }
+.municipal-map-section { margin: 1rem 0 1.5rem; }
+.municipal-map { height: min(52vh, 480px); min-height: 300px; }
+.municipal-map-summary { margin: .5rem 0; font-weight: 650; }
+.municipal-map-legend { padding: .85rem 1rem; border: 1px solid #cbd5e1; border-radius: .5rem; background: #fff; }
+.municipal-map-legend h3 { margin: 0; }
+.municipal-map-legend ul { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; list-style: none; padding: 0; }
+.municipal-map-legend li { display: inline-flex; align-items: center; gap: .5rem; }
+.municipal-pin { display: grid; place-items: center; width: 42px; height: 42px; background: transparent; border: 0; color: #152b3c; }
+.municipal-pin > span { position: relative; display: grid; place-items: center; width: 38px; height: 38px; border: 3px solid #152b3c; background: #fff; font-size: .75rem; line-height: 1; }
+.municipal-pin b { font-size: .72rem; }
+.municipal-pin small { position: absolute; right: -5px; bottom: -5px; display: grid; place-items: center; width: 17px; height: 17px; border: 1px solid #152b3c; border-radius: 50%; background: #fff; font-size: .65rem; font-weight: 800; }
+.municipal-pin-potholes > span, .municipal-legend-pin.municipal-pin-potholes { border-radius: 50%; background-color: #dbeafe; }
+.municipal-pin-illegal-waste > span, .municipal-legend-pin.municipal-pin-illegal-waste { border-radius: .25rem; background-color: #dcfce7; }
+.municipal-pin-tree > span, .municipal-legend-pin.municipal-pin-tree { border-radius: 40% 40% .2rem .2rem; background-color: #fef3c7; }
+.municipal-pin-sidewalk > span, .municipal-legend-pin.municipal-pin-sidewalk { border-radius: 50% 50% .25rem .25rem; background-color: #fce7f3; }
+.municipal-pin-other > span, .municipal-legend-pin.municipal-pin-other { background-color: #e2e8f0; }
+.municipal-pin-severity-0 > span { border-style: dotted; }
+.municipal-pin-severity-2 > span { border-style: dashed; }
+.municipal-pin-severity-3 > span { border-style: double; border-width: 4px; }
+.municipal-pin-severity-4 > span { border-width: 5px; }
+.municipal-pin-selected > span { outline: 4px solid #0f172a; outline-offset: 2px; }
+.municipal-legend-pin { display: inline-grid; place-items: center; width: 32px; height: 32px; border: 2px solid #152b3c; font-size: .7rem; font-weight: 800; }
+.municipal-incident-popup { min-width: 180px; max-width: 280px; }
+.municipal-incident-popup p { overflow-wrap: anywhere; }
+.municipal-incident-popup button { min-height: 44px; }
+.report-card-selected { outline: 4px solid #123f73; outline-offset: 2px; }
+
+/* HU-12 / HU-13: local municipal decisions and citizen-facing response. */
+.municipal-decision-panel, .public-decision { margin: 1.5rem 0; padding: 1.25rem; border: 2px solid #123f73; border-radius: .75rem; background: #f8fbff; }
+.municipal-decision-panel h2, .public-decision h2 { margin-top: 0; }
+.municipal-decision-form { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #bfdbfe; }
+.municipal-decision-form h3 { margin-top: 0; }
+.municipal-decision-panel > button { margin: .25rem .5rem .25rem 0; }
+.municipal-decision-panel .actions { gap: .75rem; }
+.public-decision { border-color: #166534; background: #f0fdf4; }
+.public-decision p { overflow-wrap: anywhere; }

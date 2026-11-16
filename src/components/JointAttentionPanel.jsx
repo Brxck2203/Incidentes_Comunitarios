@@ -7,7 +7,7 @@ function formatDateTime(isoString) {
   return date.toLocaleString('es-CR');
 }
 
-export default function JointAttentionPanel({ tracking }) {
+export default function JointAttentionPanel({ tracking, municipalView = false }) {
   if (!tracking?.isConsolidatedSecondary) return null;
 
   return (
@@ -25,16 +25,20 @@ export default function JointAttentionPanel({ tracking }) {
       <p className="joint-attention-lead">
         Tu número de ticket <strong>{tracking.ticket}</strong> fue tomado en cuenta y unificado con el expediente
         maestro{' '}
-        <Link to={`/reportes/${tracking.masterTicket}`}>
-          <strong>{tracking.masterTicket}</strong>
-        </Link>{' '}
+        {tracking.masterTicket
+          ? <Link to={municipalView
+            ? `/recepcion/${encodeURIComponent(tracking.masterTicket)}`
+            : `/reportes/${encodeURIComponent(tracking.masterTicket)}`}>
+            <strong>{tracking.masterTicket}</strong>
+          </Link>
+          : <strong>No disponible</strong>}{' '}
         para consultar el avance asociado sin reemplazar tu ticket original.
       </p>
 
       {tracking.masterUnavailable ? (
         <p className="error-message" role="alert">
           {tracking.masterUnavailableReason || `No se pudo consultar el expediente maestro (${tracking.masterTicket}).`}
-          {' '}Se muestra el estado registrado en tu ticket.
+          {' '}No se muestra un estado vigente hasta poder consultar el expediente maestro.
         </p>
       ) : (
         <>

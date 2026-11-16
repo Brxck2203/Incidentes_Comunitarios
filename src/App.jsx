@@ -14,6 +14,7 @@ export default function App() {
       <Route path="reportes" element={<ReportsPage />} />
       <Route path="reportes/:ticket" element={<ReportDetailPage />} />
       <Route path="recepcion" element={<ReportsPage reception />} />
+      <Route path="recepcion/:ticket" element={<ReportDetailPage />} />
       <Route path="*" element={<NotFoundPage />} />
     </Route>
   </Routes></BrowserRouter></ErrorBoundary>;

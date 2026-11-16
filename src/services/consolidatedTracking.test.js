@@ -29,10 +29,20 @@ test('resolveReportTracking mantiene sin cambios un reporte no consolidado', () 
 });
 
 test('resolveReportTracking muestra que el ticket secundario fue integrado a una atención conjunta y deriva el avance del maestro', () => {
+  const municipalDecision = {
+    action: 'dismiss',
+    status: 'Desestimado',
+    at: '2026-11-14T09:00:00.000Z',
+    responsible: 'Gestor local',
+    cause: 'Fuera de jurisdicción cantonal',
+    justification: 'El punto se encuentra fuera del cantón.',
+    publicResponse: 'Respuesta formal para vecinos.',
+  };
   const master = createBaseReport('RC-200', {
     isMaster: true,
     secondaryTickets: ['RC-201', 'RC-202'],
     status: 'En atención por cuadrilla',
+    municipalDecision,
     updatedAt: '2026-11-14T09:00:00.000Z',
     history: [
       { at: '2026-11-10T08:00:00.000Z', action: 'Reporte registrado' },
@@ -61,6 +71,8 @@ test('resolveReportTracking muestra que el ticket secundario fue integrado a una
   assert.equal(tracking.masterAvailable, true);
   assert.equal(tracking.effectiveStatus, 'En atención por cuadrilla');
   assert.equal(tracking.effectiveUpdatedAt, '2026-11-14T09:00:00.000Z');
+  assert.equal(tracking.effectiveDecision.publicResponse, municipalDecision.publicResponse);
+  assert.equal('responsible' in tracking.effectiveDecision, false);
   assert.equal(tracking.masterProgressHistory.length, 3);
 
   // Verifica que la entrada de consolidación esté saneada y no filtre los tickets de terceros informantes
@@ -111,7 +123,7 @@ test('resolveReportTracking maneja de forma segura cuando el caso maestro refere
   assert.equal(tracking.isConsolidatedSecondary, true);
   assert.equal(tracking.masterTicket, 'RC-999');
   assert.equal(tracking.masterUnavailable, true);
-  assert.equal(tracking.effectiveStatus, 'Registrado / Recibido');
+  assert.equal(tracking.effectiveStatus, null);
 });
 
 test('resolveReportTracking marca como inválida la relación donde un ticket se declara su propio maestro', () => {
@@ -121,6 +133,17 @@ test('resolveReportTracking marca como inválida la relación donde un ticket se
   assert.equal(tracking.isConsolidatedSecondary, true);
   assert.equal(tracking.masterUnavailable, true);
   assert.equal(tracking.masterUnavailableReason, 'El ticket original no puede ser también su propio expediente maestro.');
-  assert.equal(tracking.effectiveStatus, invalid.status);
+  assert.equal(tracking.effectiveStatus, null);
   assert.equal(tracking.masterProgressHistory.length, 0);
+});
+
+test('resolveReportTracking no inventa estado si una relación secundaria perdió el ticket maestro', () => {
+  const orphan = createBaseReport('RC-501', {
+    consolidation: { role: 'secondary' },
+  });
+  const tracking = resolveReportTracking(orphan, { [orphan.ticket]: orphan });
+  assert.equal(tracking.isConsolidatedSecondary, true);
+  assert.equal(tracking.masterTicket, null);
+  assert.equal(tracking.masterUnavailable, true);
+  assert.equal(tracking.effectiveStatus, null);
 });

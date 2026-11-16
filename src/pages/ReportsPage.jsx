@@ -1,21 +1,34 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getCurrentReporterId, getReports, resolveIncident, setReportSeverity } from '../services/reportRepository.js';
 import { resolveReportsListTracking } from '../services/consolidatedTracking.js';
 import { endorsementCount, isActiveReport, priorityInfo, severityLevels, sortReceptionReports } from '../services/reportPriority.js';
+import { filterMunicipalReports, municipalStatusLabel } from '../services/municipalConsole.js';
+import { isSecondaryReport } from '../services/municipalDecisions.js';
 import { buildDuplicateMap } from '../services/duplicateDetection.js';
 import DuplicateBadge from '../components/DuplicateBadge.jsx';
 import { consolidateReports } from '../services/consolidationService.js';
 import ConsolidationModal from '../components/ConsolidationModal.jsx';
 import ConfirmIncidentForm from '../components/ConfirmIncidentForm.jsx';
 import IncidentMap from '../components/IncidentMap.jsx';
+import MunicipalIncidentMap from '../components/MunicipalIncidentMap.jsx';
+import MunicipalConsoleFilters from '../components/MunicipalConsoleFilters.jsx';
 import { subscribeToReportChanges } from '../services/reportNotifications.js';
 
 const severityStyle = { Leve: 'mild', Moderado: 'moderate', Grave: 'serious', Crítico: 'critical' };
 
+function formatDateTime(value) {
+  if (!value) return 'No disponible';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'No disponible' : date.toLocaleString('es-CR');
+}
+
 export default function ReportsPage({ reception = false }) {
   const [reports, setReports] = useState([]);
   const [ticketQuery, setTicketQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [municipalQuery, setMunicipalQuery] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
@@ -26,28 +39,37 @@ export default function ReportsPage({ reception = false }) {
   const [busyConsolidation, setBusyConsolidation] = useState(false);
   const [consolidationError, setConsolidationError] = useState('');
   const [reporterId] = useState(() => { try { return getCurrentReporterId(); } catch { return null; } });
+  const refreshSequence = useRef(0);
   const duplicateMap = useMemo(
     () => (reception ? buildDuplicateMap(reports) : {}),
     [reception, reports],
-  );
-  const selectedReports = useMemo(
-    () => reports.filter((report) => selectedTickets.includes(report.ticket) && !report.masterTicket),
-    [reports, selectedTickets],
   );
   const trackingMap = useMemo(() => resolveReportsListTracking(reports), [reports]);
   useEffect(() => {
     let active = true;
     async function refresh() {
-      try { const result = await getReports(); if (active) { setReports(result); setError(''); } }
-      catch (failure) { if (active) setError(failure.message); }
-      finally { if (active) setLoading(false); }
+      const requestSequence = ++refreshSequence.current;
+      try {
+        const result = await getReports();
+        if (active && requestSequence === refreshSequence.current) { setReports(result); setError(''); }
+      } catch (failure) {
+        if (active && requestSequence === refreshSequence.current) setError(failure.message);
+      } finally {
+        if (active && requestSequence === refreshSequence.current) setLoading(false);
+      }
     }
     void refresh();
     window.addEventListener('focus', refresh);
     const unsubscribe = subscribeToReportChanges(refresh);
     // The reception list responds to confirmations and reprioritization within <= 3 seconds.
     const interval = setInterval(refresh, reception ? 3000 : 15000);
-    return () => { active = false; window.removeEventListener('focus', refresh); unsubscribe(); clearInterval(interval); };
+    return () => {
+      active = false;
+      refreshSequence.current += 1;
+      window.removeEventListener('focus', refresh);
+      unsubscribe();
+      clearInterval(interval);
+    };
   }, [reception]);
 
   async function changeSeverity(ticket, severity) {
@@ -99,16 +121,46 @@ export default function ReportsPage({ reception = false }) {
     }
   }
 
-  const orderedReports = reception ? sortReceptionReports(reports) : reports;
+  const orderedReports = useMemo(() => reception ? sortReceptionReports(reports.map((report) => {
+    const tracking = trackingMap[report.ticket];
+    return tracking?.isConsolidatedSecondary && !tracking.masterUnavailable
+      ? { ...report, status: tracking.effectiveStatus }
+      : report;
+  })) : reports, [reception, reports, trackingMap]);
+  const statuses = useMemo(() => [...new Set(reports.map((report) =>
+    municipalStatusLabel(report, trackingMap)).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+  [reports, trackingMap]);
   const visibleReports = useMemo(() => {
-    if (reception) return orderedReports;
+    if (reception) return filterMunicipalReports(orderedReports, {
+      category: categoryFilter,
+      status: statusFilter,
+      query: municipalQuery,
+      trackingByTicket: trackingMap,
+    });
     const query = ticketQuery.trim().toLowerCase();
     return query ? orderedReports.filter((item) => item.ticket.toLowerCase().includes(query)) : orderedReports;
-  }, [orderedReports, reception, ticketQuery]);
-  const selectedReport = reports.find((report) => report.ticket === selectedTicket);
+  }, [orderedReports, reception, ticketQuery, categoryFilter, statusFilter, municipalQuery, trackingMap]);
+  const selectedReports = useMemo(
+    () => visibleReports.filter((report) => selectedTickets.includes(report.ticket)
+      && !isSecondaryReport(report) && isActiveReport(report)),
+    [visibleReports, selectedTickets],
+  );
+  const selectedReport = visibleReports.find((report) => report.ticket === selectedTicket);
+  useEffect(() => {
+    if (!reception || !selectedTicket) return;
+    document.getElementById(`report-${selectedTicket}`)?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+  }, [reception, selectedTicket]);
   const confirmedByMe = (report) => Boolean(reporterId && report.confirmations?.some((item) => item.reporterId === reporterId));
   const subscriptions = reception ? [] : reports.filter(confirmedByMe);
-  const resolvedNotifications = subscriptions.filter((report) => !isActiveReport(report));
+  const resolvedNotifications = subscriptions.filter((report) => !trackingMap[report.ticket]?.masterUnavailable
+    && !isActiveReport({ ...report, status: trackingMap[report.ticket]?.effectiveStatus ?? report.status }));
+
+  function updateMunicipalFilter(setter, value) {
+    setter(value);
+    setSelectedTickets([]);
+    setSelectedTicket(null);
+    setConsolidating(false);
+  }
 
   return <section>
     <h1>{reception ? 'Recepción de reportes' : 'Mis reportes'}</h1>
@@ -122,41 +174,59 @@ export default function ReportsPage({ reception = false }) {
     {message && <p className="success-message" role="status">{message}</p>}
     {consolidationError && <p className="error-message" role="alert">{consolidationError}</p>}
 
+    {reception && !loading && reports.length > 0 && <>
+      <MunicipalConsoleFilters category={categoryFilter} status={statusFilter} query={municipalQuery}
+        statuses={statuses} onCategoryChange={(value) => updateMunicipalFilter(setCategoryFilter, value)}
+        onStatusChange={(value) => updateMunicipalFilter(setStatusFilter, value)}
+        onQueryChange={(value) => updateMunicipalFilter(setMunicipalQuery, value)} />
+      <MunicipalIncidentMap reports={visibleReports} trackingByTicket={trackingMap}
+        selectedTicket={visibleReports.some((report) => report.ticket === selectedTicket) ? selectedTicket : null}
+        onSelect={(ticket) => { setSelectedTicket(ticket); setMessage(''); }} />
+      {!visibleReports.length && <p role="status">No hay reportes que coincidan con los filtros seleccionados.</p>}
+    </>}
+
     {!reception && !loading && reports.length > 0 && <>
       <h2>Incidentes abiertos en el mapa</h2>
       <p>Selecciona un marcador y utiliza «Confirmar incidente» para respaldar un reporte existente.</p>
-      <IncidentMap reports={reports} onSelect={(ticket) => { setSelectedTicket(ticket); setMessage(''); }} />
+      <IncidentMap reports={reports} trackingByTicket={trackingMap}
+        onSelect={(ticket) => { setSelectedTicket(ticket); setMessage(''); }} />
       {selectedReport && <div className="selected-incident">
-        <p><strong>{selectedReport.ticket}</strong> · {selectedReport.category || 'Sin clasificar'} · {selectedReport.status}</p>
+        <p><strong>{selectedReport.ticket}</strong> · {selectedReport.category || 'Sin clasificar'} · {municipalStatusLabel(selectedReport, trackingMap)}</p>
+        {trackingMap[selectedReport.ticket]?.masterUnavailable
+          ? <p className="error-message" role="alert">No se pudo determinar el estado vigente del expediente maestro.</p>
+          : null}
         {confirmedByMe(selectedReport)
           ? <p role="status">Ya confirmaste este incidente y estás suscrito a su resolución.</p>
           : selectedReport.reporterId && selectedReport.reporterId === reporterId
             ? <p role="status">Este reporte se registró desde tu navegador. No puedes respaldar tu propio reporte.</p>
-            : <ConfirmIncidentForm key={selectedReport.ticket} ticket={selectedReport.ticket}
+            : !trackingMap[selectedReport.ticket]?.masterUnavailable
+              && isActiveReport({ ...selectedReport, status: trackingMap[selectedReport.ticket]?.effectiveStatus ?? selectedReport.status })
+              ? <ConfirmIncidentForm key={selectedReport.ticket} ticket={selectedReport.ticket}
                 onConfirmed={(updated) => {
                   setReports((previous) => previous.map((report) => report.ticket === updated.ticket ? updated : report));
                   setSelectedTicket(null);
                   setMessage('Confirmación guardada. Recibirás un aviso aquí cuando el incidente se resuelva.');
-                }} onCancel={() => setSelectedTicket(null)} />}
+                }} onCancel={() => setSelectedTicket(null)} />
+              : <p role="status">Este incidente ya no acepta confirmaciones.</p>}
         <Link to={`/reportes/${selectedReport.ticket}`}>Ver detalle del reporte</Link>
       </div>}
       {subscriptions.length > 0 && <section aria-label="Reportes que sigo">
         <h2>Reportes que sigo</h2>
-        <ul>{subscriptions.map((report) => <li key={report.ticket}><Link to={`/reportes/${report.ticket}`}>{report.ticket}</Link> · {report.status}</li>)}</ul>
+        <ul>{subscriptions.map((report) => <li key={report.ticket}><Link to={`/reportes/${report.ticket}`}>{report.ticket}</Link> · {municipalStatusLabel(report, trackingMap)}</li>)}</ul>
       </section>}
       {resolvedNotifications.length > 0 && <section className="resolution-notices" aria-label="Notificaciones de resolución" role="status">
         <h2>Notificaciones de resolución</h2>
         <ul>{resolvedNotifications.map((report) => <li key={report.ticket}>
-          El incidente <Link to={`/reportes/${report.ticket}`}>{report.ticket}</Link> fue {report.status.toLowerCase()} el {new Date(report.resolvedAt || report.updatedAt).toLocaleString('es-CR')}.
+          El incidente <Link to={`/reportes/${report.ticket}`}>{report.ticket}</Link> fue {(trackingMap[report.ticket]?.effectiveStatus ?? report.status ?? 'cerrado').toLowerCase()} el {formatDateTime(report.resolvedAt || trackingMap[report.ticket]?.effectiveUpdatedAt || report.updatedAt)}.
         </li>)}</ul>
       </section>}
     </>}
 
     {!loading && !error && !reports.length && <p>Aún no hay reportes registrados.</p>}
-    {!loading && !error && reports.length > 0 && !visibleReports.length && (
+    {!reception && !loading && !error && reports.length > 0 && !visibleReports.length && (
       <p role="status">No se encontró ningún reporte que coincida con el ticket ingresado.</p>
     )}
-    {reception && reports.length >= 2 && <div className="consolidation-toolbar" role="region" aria-label="Herramientas de consolidación de reportes">
+    {reception && visibleReports.filter((report) => !isSecondaryReport(report) && isActiveReport(report)).length >= 2 && <div className="consolidation-toolbar" role="region" aria-label="Herramientas de consolidación de reportes">
       <p className="consolidation-toolbar-status">
         {selectedReports.length === 0
           ? 'Selecciona dos o más reportes para agruparlos en un solo caso maestro.'
@@ -184,50 +254,62 @@ export default function ReportsPage({ reception = false }) {
       const info = priorityInfo(report);
       const duplicateInfo = reception ? duplicateMap[report.ticket] : null;
       const isDuplicate = Boolean(duplicateInfo?.isSuspectedDuplicate);
-      const isSecondary = Boolean(report.masterTicket);
+      const isSecondary = isSecondaryReport(report);
       const isMaster = Array.isArray(report.secondaryTickets) && report.secondaryTickets.length > 0;
-      const isChecked = selectedTickets.includes(report.ticket);
+      const isChecked = selectedReports.some((selected) => selected.ticket === report.ticket);
       const tracking = trackingMap[report.ticket];
       const isConsolidated = Boolean(tracking?.isConsolidatedSecondary);
-      const effectiveStatus = tracking?.effectiveStatus ?? report.status;
-      return <li key={report.ticket} className={`report-card ${isDuplicate ? 'report-card-duplicate' : ''} ${isMaster ? 'report-card-master' : ''} ${isSecondary ? 'report-card-secondary' : ''} ${isConsolidated && !reception ? 'report-card-joint' : ''}`}>
+      const effectiveStatus = reception || tracking?.isConsolidatedSecondary
+        ? municipalStatusLabel(report, trackingMap)
+        : report.status ?? 'Estado no disponible';
+      const eventLabel = isSecondary && !tracking?.masterUnavailable
+        ? 'Actualización del expediente maestro'
+        : isSecondary
+          ? 'Actualización del ticket original'
+          : report.receptionEvent || 'Actualización del reporte';
+      const eventAt = isSecondary && !tracking?.masterUnavailable
+        ? tracking.effectiveUpdatedAt
+        : report.updatedAt;
+      const isSelected = selectedReport?.ticket === report.ticket && selectedTicket === report.ticket;
+      return <li id={`report-${report.ticket}`} key={report.ticket} aria-current={isSelected ? 'true' : undefined}
+        className={`report-card ${isSelected ? 'report-card-selected' : ''} ${isDuplicate ? 'report-card-duplicate' : ''} ${isMaster ? 'report-card-master' : ''} ${isSecondary ? 'report-card-secondary' : ''} ${isConsolidated && !reception ? 'report-card-joint' : ''}`}>
         <div className="report-card-header">
           {reception && <label className="report-select-checkbox">
-            <input type="checkbox" checked={isChecked} disabled={isSecondary || busyConsolidation}
+            <input type="checkbox" checked={isChecked} disabled={isSecondary || !isActiveReport(report) || busyConsolidation}
               onChange={() => toggleSelection(report.ticket)}
               aria-label={`Seleccionar reporte ${report.ticket} para consolidar`} />
             <span>Seleccionar</span>
           </label>}
-          <Link to={`/reportes/${report.ticket}`} state={reception ? { fromReception: true } : undefined}>{report.ticket}</Link>
+          <Link to={reception ? `/recepcion/${encodeURIComponent(report.ticket)}` : `/reportes/${report.ticket}`}>{report.ticket}</Link>
           {isMaster && <span className="consolidation-status-badge master-badge">
             Caso maestro ({report.secondaryTickets.length} {report.secondaryTickets.length === 1 ? 'unificado' : 'unificados'})
           </span>}
-          {isSecondary && <span className="consolidation-status-badge secondary-badge">Consolidado en {report.masterTicket}</span>}
+          {isSecondary && <span className="consolidation-status-badge secondary-badge">Consolidado en {report.masterTicket || report.consolidation?.masterTicket || 'expediente no disponible'}</span>}
           {isConsolidated && !reception && <span className="joint-attention-badge">Atención conjunta ({tracking.masterTicket})</span>}
           {isDuplicate && <DuplicateBadge match={duplicateInfo.primaryMatch} count={duplicateInfo.matches.length} />}
         </div>
         <p>{report.category || 'Sin clasificar'} · {effectiveStatus}</p>
-        {isConsolidated && !reception && (tracking.masterUnavailable
-          ? <p className="error-message" role="alert">{tracking.masterUnavailableReason} Se muestra el estado registrado en este ticket.</p>
-          : <p className="joint-attention-card-note" role="status">
+        {isConsolidated && tracking.masterUnavailable
+          ? <p className="error-message" role="alert">{tracking.masterUnavailableReason} No se pudo determinar el estado vigente del maestro.</p>
+          : isConsolidated && !reception && <p className="joint-attention-card-note" role="status">
             Avance del expediente maestro: <strong>{tracking.effectiveStatus}</strong>
-          </p>)}
-        <p>{new Date(report.createdAt).toLocaleString('es-CR')}</p>
+          </p>}
+        <p>{formatDateTime(report.createdAt)}</p>
         {endorsementCount(report) > 0 && <p>Vecinos que confirman el incidente: <strong>{endorsementCount(report)}</strong></p>}
         {reception && <>
-          <p role="status">{report.receptionEvent} · {new Date(report.updatedAt).toLocaleString('es-CR')}</p>
+          <p role="status">{eventLabel} · {formatDateTime(eventAt)}</p>
           <div className="severity-panel">
             <span className={`severity-pill severity-${severityStyle[report.severity] || 'none'}`}>{report.severity || 'Sin severidad'}</span>
             <span>Indicador de prioridad: <strong>{info.score}</strong> · Respaldos: {info.supporters}</span>
             <label>Severidad técnica
               <select aria-label={`Severidad técnica del reporte ${report.ticket}`} value={report.severity || ''}
-                disabled={Boolean(savingTicket) || !isActiveReport(report)}
+                disabled={Boolean(savingTicket) || !isActiveReport(report) || isSecondary}
                 onChange={(event) => { void changeSeverity(report.ticket, event.target.value); }}>
                 <option value="">Sin evaluar</option>
                 {severityLevels.map((value) => <option key={value} value={value}>{value}</option>)}
               </select>
             </label>
-            {isActiveReport(report) && <button type="button" className="secondary" disabled={Boolean(savingTicket)}
+            {isActiveReport(report) && !isSecondary && <button type="button" className="secondary" disabled={Boolean(savingTicket)}
               onClick={() => { void markResolved(report.ticket); }}>Marcar resuelto</button>}
           </div>
         </>}
