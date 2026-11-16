@@ -1,6 +1,8 @@
 // TODO: integrar con consola municipal cuando se integre HU-11
 // TODO: reutilizar contrato de masterTicket y secondaryTickets cuando se integre HU-09
 
+import { notifyReportChange } from './reportNotifications.js';
+
 export const DEFAULT_OFFICIAL_NAME = 'Gestor municipal';
 
 function openDatabase() {
@@ -8,11 +10,12 @@ function openDatabase() {
     if (!window.indexedDB) {
       return reject(new Error('El navegador no permite guardar reportes.'));
     }
-    const request = indexedDB.open('reporte-ciudadano', 1);
+    const request = indexedDB.open('reporte-ciudadano', 2);
     request.onupgradeneeded = () => {
-      if (!request.result.objectStoreNames.contains('reports')) {
-        request.result.createObjectStore('reports', { keyPath: 'ticket' });
-      }
+      const store = request.result.objectStoreNames.contains('reports')
+        ? request.transaction.objectStore('reports')
+        : request.result.createObjectStore('reports', { keyPath: 'ticket' });
+      if (!store.indexNames.contains('category')) store.createIndex('category', 'category', { unique: false });
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(new Error('No se pudo abrir el almacenamiento.'));
@@ -212,6 +215,16 @@ export async function consolidateReports({ tickets, masterTicket, reason, offici
 
     tx.oncomplete = () => {
       database.close();
+      if (resultPayload) {
+        try {
+          notifyReportChange({ type: 'updated', ticket: resultPayload.masterReport.ticket });
+          for (const report of resultPayload.secondaryReports) {
+            notifyReportChange({ type: 'updated', ticket: report.ticket });
+          }
+        } catch (error) {
+          console.warn('La consolidación se guardó, pero no se pudo notificar la actualización local.', error);
+        }
+      }
       resolve(resultPayload);
     };
     tx.onabort = () => {

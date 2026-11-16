@@ -61,3 +61,11 @@ Implementar el comportamiento demostrable sobre almacenamiento local, sin backen
 Trabajar únicamente en esta rama y abrir pull request hacia main con referencia a HU-08. No hacer push directo a main. Actualizar con main antes de integrar, coordinar archivos compartidos y solicitar revisión de otro integrante. Crear la rama y este README no significa que la historia esté implementada.
 
 Este README ocupa una ruta propia para conservar el README general y no sobrescribir documentos de otras historias al fusionar.
+
+## Integración con HU-07 y la base vigente
+
+La rama se actualizó desde `main` después de integrar HU-07. Se conservaron en Recepción el mapa, las confirmaciones, la prioridad, el indicador de posibles duplicados y sus rutas al detalle; la consolidación se añadió como flujo explícito separado. El detalle conserva las evidencias del ticket y presenta los vínculos y evidencias adicionales del maestro.
+
+El servicio de consolidación abre la base `reporte-ciudadano` en la versión 2 vigente, conserva los registros y el índice de categoría y escribe los cambios relacionados en una sola transacción. Después de completar la transacción emite notificaciones locales para el maestro y sus secundarios; la actualización sigue limitada al mismo navegador/origen y no representa sincronización con el municipio.
+
+Verificaciones de esta integración: 4 pruebas unitarias del servicio de consolidación, 10 pruebas del conjunto `tests/*.test.js` y `npm run build` aprobados. `npm run lint` terminó con advertencias existentes en `Evidence.jsx`, `IncidentMap.jsx` y `ReportDetailPage.jsx`. La prueba automatizada de la transacción de consolidación sobre la base vigente y la validación manual de interfaz siguen pendientes; estos resultados no certifican los criterios de negocio completos.
