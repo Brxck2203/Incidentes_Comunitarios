@@ -25,11 +25,13 @@ async function transaction(mode, action) {
   return new Promise((resolve, reject) => {
     const tx = database.transaction('reports', mode);
     let result;
+    let reason;
     tx.oncomplete = () => { database.close(); resolve(result); };
-    tx.onabort = () => { database.close(); reject(new Error('No se pudo guardar o consultar el reporte. Revisa el espacio disponible e inténtalo de nuevo.')); };
+    tx.onabort = () => { database.close(); reject(reason || new Error('No se pudo guardar o consultar el reporte. Revisa el espacio disponible e inténtalo de nuevo.')); };
     tx.onerror = () => {};
-    try { action(tx.objectStore('reports'), (value) => { result = value; }); }
-    catch (error) { tx.abort(); reject(error); }
+    const fail = (message) => { reason = new Error(message); tx.abort(); };
+    try { action(tx.objectStore('reports'), (value) => { result = value; }, fail); }
+    catch (error) { reason = error; tx.abort(); }
   });
 }
 

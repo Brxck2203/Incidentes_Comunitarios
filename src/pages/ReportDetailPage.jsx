@@ -71,6 +71,7 @@ export default function ReportDetailPage() {
     {error && <p className="error-message" role="alert">{error}</p>}
     {message && <p className="success-message" role="status">{message}</p>}
     <h2>Evidencias</h2><Evidence audio={report.audio} photos={report.photos} />
+    {report.severity && <p>Severidad técnica: <strong>{report.severity}</strong></p>}
     {editing ? <form onSubmit={save}>
       <h2>Agregar más detalles</h2>
       <label>Categoría<select value={draft.category} onChange={(event) => field('category', event.target.value)} disabled={busy}>
