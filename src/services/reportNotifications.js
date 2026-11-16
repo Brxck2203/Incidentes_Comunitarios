@@ -5,10 +5,12 @@ const sourceId = `${Date.now()}-${Math.random()}`;
 export function notifyReportChange({ type, ticket }) {
   const eventType = type === 'created' ? 'report-created' : 'report-updated';
   const metadata = { type: eventType, ticket };
-  try {
-    window.dispatchEvent(new CustomEvent(REPORTS_CHANGED_EVENT, { detail: metadata }));
-  } catch (failure) {
-    console.warn('El reporte se guardó, pero no se pudo actualizar esta pestaña.', failure);
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    try {
+      window.dispatchEvent(new CustomEvent(REPORTS_CHANGED_EVENT, { detail: metadata }));
+    } catch (failure) {
+      console.warn('El reporte se guardó, pero no se pudo actualizar esta pestaña.', failure);
+    }
   }
   if (typeof BroadcastChannel === 'undefined') return;
 
@@ -28,7 +30,9 @@ export function notifyReportChange({ type, ticket }) {
 
 export function subscribeToReportChanges(onChange) {
   const handleLocalChange = () => onChange();
-  window.addEventListener(REPORTS_CHANGED_EVENT, handleLocalChange);
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener(REPORTS_CHANGED_EVENT, handleLocalChange);
+  }
 
   let channel;
   if (typeof BroadcastChannel !== 'undefined') {
@@ -45,7 +49,9 @@ export function subscribeToReportChanges(onChange) {
   }
 
   return () => {
-    window.removeEventListener(REPORTS_CHANGED_EVENT, handleLocalChange);
+    if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
+      window.removeEventListener(REPORTS_CHANGED_EVENT, handleLocalChange);
+    }
     try {
       channel?.close();
     } catch (failure) {

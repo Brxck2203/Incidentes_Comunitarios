@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { categories, getReport, complementReport, validatePhotos } from '../services/reportRepository.js';
+import { categories, getReport, complementReport, getCurrentReporterId, validatePhotos } from '../services/reportRepository.js';
+import { endorsementCount, isActiveReport } from '../services/reportEndorsements.js';
+import ConfirmIncidentForm from '../components/ConfirmIncidentForm.jsx';
 import Evidence from '../components/Evidence.jsx';
 import LocationMap from '../components/LocationMap.jsx';
 
@@ -20,7 +22,8 @@ export default function ReportDetailPage() {
   const operationRef = useRef(null);
   const mountedRef = useRef(false);
   const currentTicketRef = useRef(ticket);
-  currentTicketRef.current = ticket;
+  const [confirmOpen, setConfirmOpen] = useState(Boolean(location.state?.confirm));
+  const [viewerId] = useState(() => { try { return getCurrentReporterId(); } catch { return null; } });
 
   useEffect(() => {
     mountedRef.current = true;
@@ -29,14 +32,18 @@ export default function ReportDetailPage() {
 
   useEffect(() => {
     let active = true;
+    currentTicketRef.current = ticket;
     setLoading(true); setError(''); setEditing(false); setReport(null); setDraft(null);
     setMessage(''); setPhotos([]); setPhotoSelectionNotice('');
+    setConfirmOpen(Boolean(location.state?.confirm));
     getReport(ticket).then((value) => { if (active) setReport(value); })
       .catch((failure) => { if (active) setError(failure.message); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [ticket]);
-  function field(name, value) { setDraft((current) => ({ ...current, [name]: value })); }
+  }, [ticket, location.state?.confirm]);
+  function field(name, value) {
+    if (!busyRef.current) setDraft((current) => ({ ...current, [name]: value }));
+  }
   async function save(event) {
     event.preventDefault();
     if (busyRef.current) return;
@@ -81,6 +88,24 @@ export default function ReportDetailPage() {
     {error && <p className="error-message" role="alert">{error}</p>}
     {message && <p className="success-message" role="status">{message}</p>}
     <h2>Evidencias</h2><Evidence audio={report.audio} photos={report.photos || []} />
+    {report.severity && <p>Severidad técnica: <strong>{report.severity}</strong></p>}
+    {endorsementCount(report) > 0 && <p>Vecinos que confirmaron: {endorsementCount(report)}</p>}
+    {isActiveReport(report) && report.reporterId !== viewerId && !report.confirmations?.some((confirmation) => confirmation.reporterId === viewerId) && (
+      <button type="button" onClick={() => setConfirmOpen((open) => !open)}>
+        {confirmOpen ? 'Cerrar confirmación' : 'Confirmar incidente'}
+      </button>
+    )}
+    {confirmOpen && isActiveReport(report) && report.reporterId !== viewerId && (
+      <ConfirmIncidentForm
+        ticket={report.ticket}
+        onConfirmed={(updated) => {
+          setReport(updated);
+          setConfirmOpen(false);
+          setMessage('Confirmación registrada.');
+        }}
+        onCancel={() => setConfirmOpen(false)}
+      />
+    )}
     {editing ? <form onSubmit={save}>
       <h2>Agregar más detalles</h2>
       <label>Categoría<select value={draft.category || ''} onChange={(event) => field('category', event.target.value)} disabled={busy}>
@@ -92,6 +117,7 @@ export default function ReportDetailPage() {
       <label>Agregar fotografías<input type="file" multiple accept="image/jpeg,image/png,image/webp,image/avif" disabled={busy} onChange={(event) => {
         const input = event.currentTarget;
         try {
+          if (busyRef.current) return;
           if (!input.files?.length) return;
           setPhotos(validatePhotos(input.files));
           setPhotoSelectionNotice('');

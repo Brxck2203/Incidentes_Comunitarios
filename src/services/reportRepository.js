@@ -1,4 +1,5 @@
 import { notifyReportChange } from './reportNotifications.js';
+import { isActiveReport, severityLevels } from './reportPriority.js';
 
 export const categories = ['Baches', 'Basura clandestina', 'Ramas/arbolado', 'Aceras dañadas'];
 
@@ -40,7 +41,9 @@ async function transaction(mode, action) {
     };
     tx.onerror = () => {};
     const abort = (error) => {
-      failure = error instanceof Error ? error : new Error('No se pudo actualizar el reporte.');
+      failure = error instanceof Error
+        ? error
+        : new Error(typeof error === 'string' ? error : 'No se pudo actualizar el reporte.');
       try {
         tx.abort();
       } catch {
@@ -94,7 +97,19 @@ export function validatePhotos(files) {
   return photos;
 }
 
-export async function createReport({ audio, photos, position, capturedAt } = {}) {
+// A persistent anonymous browser ID; it is not an authentication system.
+export function getCurrentReporterId() {
+  const key = 'reporte-ciudadano-participante';
+  try {
+    let id = localStorage.getItem(key);
+    if (!id) { id = crypto.randomUUID(); localStorage.setItem(key, id); }
+    return id;
+  } catch {
+    throw new Error('Para confirmar incidentes, habilita el almacenamiento del navegador.');
+  }
+}
+
+export async function createReport({ audio, photos, position, capturedAt, reporterId = null } = {}) {
   const normalizedPhotos = validatePhotos(photos);
   if (!audio?.size && !normalizedPhotos.length) throw new Error('Graba una nota de voz o adjunta una fotografía.');
   validatePosition(position);
@@ -103,7 +118,7 @@ export async function createReport({ audio, photos, position, capturedAt } = {})
   const report = {
     ticket, createdAt, capturedAt, updatedAt: createdAt, status: 'Registrado / Recibido',
     audio, photos: normalizedPhotos, position, originalPosition: position, description: '', transcription: '',
-    category: '', references: '', receptionEvent: 'Nuevo reporte',
+    category: '', references: '', receptionEvent: 'Nuevo reporte', reporterId, confirmations: [],
     history: [{ at: createdAt, action: 'Reporte registrado' }],
   };
   await transaction('readwrite', (store) => store.add(report));
@@ -166,6 +181,85 @@ export function complementReport(ticket, details, photos) {
       } catch (failure) {
         abort(failure);
       }
+    };
+  }).then((report) => {
+    notifyReportChange({ type: 'updated', ticket });
+    return report;
+  });
+}
+
+export function setReportSeverity(ticket, severity) {
+  if (severity !== '' && !severityLevels.includes(severity)) throw new Error('Selecciona una severidad válida.');
+  return transaction('readwrite', (store, done, fail) => {
+    const request = store.get(ticket);
+    request.onsuccess = () => {
+      const current = request.result;
+      if (!current) return fail('El reporte solicitado no existe.');
+      if (!isActiveReport(current)) return fail('No se puede cambiar la severidad de un incidente cerrado.');
+      if ((current.severity || '') === severity) { done(current); return; }
+      const at = new Date().toISOString();
+      const report = { ...current, severity, updatedAt: at, receptionEvent: 'Severidad actualizada',
+        history: [...(Array.isArray(current.history) ? current.history : []), { at, action: `Severidad técnica asignada: ${severity || 'Sin clasificar'}` }],
+      };
+      store.put(report); done(report);
+    };
+  }).then((report) => {
+    notifyReportChange({ type: 'updated', ticket });
+    return report;
+  });
+}
+
+export function confirmIncident(ticket, photos, reporterId) {
+  if (typeof ticket !== 'string' || !ticket.trim()) throw new Error('El ticket del reporte no es válido.');
+  if (typeof reporterId !== 'string' || !reporterId.trim()) throw new Error('No se pudo identificar al participante.');
+  const newPhotos = validatePhotos(photos);
+  return transaction('readwrite', (store, done, fail) => {
+    const request = store.get(ticket);
+    request.onsuccess = () => {
+      const current = request.result;
+      if (!current) return fail('El reporte solicitado no existe.');
+      if (!isActiveReport(current)) return fail('El reporte no admite confirmaciones porque ya está cerrado.');
+      if (current.reporterId && current.reporterId === reporterId) return fail('No puedes confirmar tu propio reporte.');
+      const confirmations = Array.isArray(current.confirmations) ? current.confirmations : [];
+      if (confirmations.some((item) => item.reporterId === reporterId)) {
+        return fail('Ya confirmaste anteriormente este reporte.');
+      }
+      const at = new Date().toISOString();
+      const updated = {
+        ...current,
+        confirmations: [...confirmations, { reporterId, at, photos: newPhotos }],
+        updatedAt: at,
+        receptionEvent: 'Confirmación ciudadana',
+        history: [...(Array.isArray(current.history) ? current.history : []), { at, action: 'Incidente confirmado por un vecino' }],
+      };
+      store.put(updated);
+      done(updated);
+    };
+  }).then((report) => {
+    notifyReportChange({ type: 'updated', ticket });
+    return report;
+  });
+}
+
+export function resolveIncident(ticket) {
+  if (typeof ticket !== 'string' || !ticket.trim()) throw new Error('El ticket del reporte no es válido.');
+  return transaction('readwrite', (store, done, fail) => {
+    const request = store.get(ticket);
+    request.onsuccess = () => {
+      const current = request.result;
+      if (!current) return fail('El reporte solicitado no existe.');
+      if (!isActiveReport(current)) return fail('El reporte ya está cerrado.');
+      const at = new Date().toISOString();
+      const resolved = {
+        ...current,
+        status: 'Resuelto',
+        resolvedAt: at,
+        updatedAt: at,
+        receptionEvent: 'Reporte resuelto',
+        history: [...(Array.isArray(current.history) ? current.history : []), { at, action: 'Reporte marcado como resuelto' }],
+      };
+      store.put(resolved);
+      done(resolved);
     };
   }).then((report) => {
     notifyReportChange({ type: 'updated', ticket });

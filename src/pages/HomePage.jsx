@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import useAudioRecorder from '../hooks/useAudioRecorder.js';
-import { createReport, validatePhotos } from '../services/reportRepository.js';
+import { createReport, getCurrentReporterId, validatePhotos } from '../services/reportRepository.js';
 import { getCurrentPosition } from '../services/geolocation.js';
 import Evidence from '../components/Evidence.jsx';
 
@@ -51,6 +51,7 @@ export default function HomePage() {
   const publishing = useRef(false);
   const active = useRef(true);
   const cameraInputRef = useRef(null);
+  const [reporterId] = useState(() => { try { return getCurrentReporterId(); } catch { return null; } });
   const navigate = useNavigate();
 
   function updateDraft(nextDraft) {
@@ -102,6 +103,7 @@ export default function HomePage() {
         photos: snapshot.photos,
         position,
         capturedAt: snapshot.capturedAt,
+        reporterId,
       });
       if (!active.current) return;
       navigate(`/reportes/${report.ticket}`, { state: { created: true } });
@@ -254,7 +256,7 @@ export default function HomePage() {
             <button
               type="button"
               className="secondary"
-              onClick={() => { void stopForReview(); }}
+              onClick={stopForReview}
               disabled={busy}
             >
               Detener y escuchar primero
