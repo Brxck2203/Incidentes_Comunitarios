@@ -28,4 +28,3 @@ export function sortReceptionReports(reports) {
       || a.createdAt.localeCompare(b.createdAt);
   });
 }
-

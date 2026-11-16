@@ -1,7 +1,6 @@
+import { notifyReportChange } from './reportNotifications.js';
+import { isActiveReport, severityLevels } from './reportPriority.js';
 import { nearbyMatches } from './reportDuplicates.js';
-import { isActiveReport } from './reportEndorsements.js';
-import { severityLevels } from './reportPriority.js';
-import { notifyReportCreated } from './reportNotifications.js';
 
 export const categories = ['Baches', 'Basura clandestina', 'Ramas/arbolado', 'Aceras dañadas'];
 
@@ -26,15 +25,48 @@ function openDatabase() {
 async function transaction(mode, action) {
   const database = await openDatabase();
   return new Promise((resolve, reject) => {
-    const tx = database.transaction('reports', mode);
+    let tx;
+    try {
+      tx = database.transaction('reports', mode);
+    } catch {
+      database.close();
+      reject(new Error('No se pudo iniciar la operación del reporte.'));
+      return;
+    }
     let result;
-    let reason;
-    tx.oncomplete = () => { database.close(); resolve(result); };
-    tx.onabort = () => { database.close(); reject(reason || new Error('No se pudo guardar o consultar el reporte. Revisa el espacio disponible e inténtalo de nuevo.')); };
+    let failure = null;
+    let settled = false;
+    tx.oncomplete = () => {
+      database.close();
+      settled = true;
+      resolve(result);
+    };
+    tx.onabort = () => {
+      database.close();
+      if (settled) return;
+      settled = true;
+      reject(failure || new Error('No se pudo guardar o consultar el reporte. Revisa el espacio disponible e inténtalo de nuevo.'));
+    };
     tx.onerror = () => {};
-    const fail = (message) => { reason = new Error(message); tx.abort(); };
-    try { action(tx.objectStore('reports'), (value) => { result = value; }, fail); }
-    catch (error) { reason = error; tx.abort(); }
+    const abort = (error) => {
+      failure = error instanceof Error
+        ? error
+        : new Error(typeof error === 'string' ? error : 'No se pudo actualizar el reporte.');
+      try {
+        tx.abort();
+      } catch {
+        database.close();
+        if (!settled) {
+          settled = true;
+          reject(failure);
+        }
+      }
+    };
+    try {
+      action(tx.objectStore('reports'), (value) => { result = value; }, abort);
+    } catch (error) {
+      abort(error);
+    }
   });
 }
 
@@ -73,61 +105,7 @@ export function validatePhotos(files) {
   return photos;
 }
 
-export async function createReport({ audio, photos, position, capturedAt, category = '', reporterId = null }) {
-  const checkedPhotos = validatePhotos(photos);
-  validatePosition(position);
-  if (category && !categories.includes(category)) throw new Error('Selecciona una categoría válida.');
-  if (!audio?.size && !checkedPhotos.length) throw new Error('Graba una nota de voz o adjunta una fotografía.');
-  const createdAt = new Date().toISOString();
-  const ticket = `RC-${crypto.randomUUID()}`;
-  const report = {
-    ticket, createdAt, capturedAt, updatedAt: createdAt, status: 'Registrado / Recibido',
-    audio, photos: checkedPhotos, position, originalPosition: position, description: '', transcription: '',
-    category, references: '', receptionEvent: 'Nuevo reporte', reporterId, confirmations: [], severity: '',
-    history: [{ at: createdAt, action: 'Reporte registrado' }],
-  };
-  await transaction('readwrite', (store) => store.add(report));
-  notifyReportCreated();
-  return report;
-}
-
-export async function complementReport(ticket, details, photos) {
-  validatePosition(details.position);
-  const checkedPhotos = validatePhotos(photos);
-  if (details.category && !categories.includes(details.category)) throw new Error('Selecciona una categoría válida.');
-  const updated = await transaction('readwrite', (store, done, fail) => {
-    const request = store.get(ticket);
-    request.onsuccess = () => {
-      const current = request.result;
-      if (!current) return fail('El reporte solicitado no existe.');
-      const at = new Date().toISOString();
-      const report = { ...current,
-        category: details.category, description: details.description.trim(),
-        transcription: details.transcription.trim(), references: details.references.trim(),
-        position: details.position, photos: [...(current.photos || []), ...checkedPhotos], updatedAt: at,
-        receptionEvent: 'Información complementada',
-        history: [...current.history, { at, action: 'Información complementada y ubicación confirmada' }],
-      };
-      store.put(report);
-      done(report);
-    };
-  });
-  notifyReportCreated();
-  return updated;
-}
-
-// HU-06: filter on an indexed category before performing an exact geographic comparison.
-export function findPotentialDuplicates(position, category, excludeTicket = null) {
-  validatePosition(position);
-  if (!category) return Promise.resolve([]);
-  if (!categories.includes(category)) return Promise.reject(new Error('Selecciona una categoría válida.'));
-  return transaction('readonly', (store, done) => {
-    const request = store.index('category').getAll(category);
-    request.onsuccess = () => done(nearbyMatches(request.result, position, category, excludeTicket));
-  });
-}
-
-// This anonymous browser ID is for the local prototype only; it is not authentication.
+// A persistent anonymous browser ID; it is not an authentication system.
 export function getCurrentReporterId() {
   const key = 'reporte-ciudadano-participante';
   try {
@@ -139,31 +117,84 @@ export function getCurrentReporterId() {
   }
 }
 
+export async function createReport({ audio, photos, position, capturedAt, reporterId = null, category = '' } = {}) {
+  const normalizedPhotos = validatePhotos(photos);
+  if (!audio?.size && !normalizedPhotos.length) throw new Error('Graba una nota de voz o adjunta una fotografía.');
+  validatePosition(position);
+  if (category && !categories.includes(category)) throw new Error('Selecciona una categoría válida.');
+  const createdAt = new Date().toISOString();
+  const ticket = `RC-${crypto.randomUUID()}`;
+  const report = {
+    ticket, createdAt, capturedAt, updatedAt: createdAt, status: 'Registrado / Recibido',
+    audio, photos: normalizedPhotos, position, originalPosition: position, description: '', transcription: '',
+    category, references: '', receptionEvent: 'Nuevo reporte', reporterId, confirmations: [], severity: '',
+    history: [{ at: createdAt, action: 'Reporte registrado' }],
+  };
+  await transaction('readwrite', (store) => store.add(report));
+  notifyReportChange({ type: 'created', ticket });
+  return report;
+}
 
-// HU-10: a local browser identity may endorse an active report once and subscribe to resolution.
-export async function confirmIncident(ticket, uploadedPhotos, reporterId) {
-  const photos = validatePhotos(uploadedPhotos);
-  if (!reporterId) throw new Error('No se pudo identificar este navegador.');
-  const updated = await transaction('readwrite', (store, done, fail) => {
+export function complementReport(ticket, details, photos) {
+  if (typeof ticket !== 'string' || !ticket.trim()) throw new Error('El ticket del reporte no es válido.');
+  if (!details || typeof details !== 'object' || Array.isArray(details)) {
+    throw new Error('Los datos de complementación no son válidos.');
+  }
+  const optionalText = (value, label, maxLength) => {
+    if (value == null) return '';
+    if (typeof value !== 'string') throw new Error(`${label} debe ser texto.`);
+    if (value.length > maxLength) throw new Error(`${label} no puede superar ${maxLength} caracteres.`);
+    const text = value.trim();
+    return text;
+  };
+  const description = optionalText(details.description, 'La descripción', 5000);
+  const transcription = optionalText(details.transcription, 'El complemento de la nota', 5000);
+  const references = optionalText(details.references, 'Las señas o referencias', 2000);
+  const category = details.category ?? '';
+  if (typeof category !== 'string') throw new Error('Selecciona una categoría válida.');
+  if (category && !categories.includes(category)) throw new Error('Selecciona una categoría válida.');
+  validatePosition(details.position);
+  if (photos != null && typeof photos[Symbol.iterator] !== 'function') {
+    throw new Error('La selección de fotografías no es válida.');
+  }
+  const newPhotos = validatePhotos(photos);
+
+  return transaction('readwrite', (store, done, abort) => {
     const request = store.get(ticket);
     request.onsuccess = () => {
-      const current = request.result;
-      if (!current) return fail('El reporte solicitado no existe.');
-      if (!isActiveReport(current)) return fail('Este incidente ya no admite confirmaciones.');
-      if (current.reporterId && current.reporterId === reporterId) return fail('No puedes confirmar tu propio reporte.');
-      if ((current.confirmations || []).some((entry) => entry.reporterId === reporterId)) return fail('Ya confirmaste este incidente anteriormente.');
-      const at = new Date().toISOString();
-      const report = { ...current,
-        confirmations: [...(current.confirmations || []), { reporterId, at, photos }],
-        updatedAt: at, receptionEvent: 'Confirmación ciudadana recibida',
-        history: [...current.history, { at, action: 'Incidente confirmado por otro vecino (suscripción a resolución)' }],
-      };
-      store.put(report);
-      done(report);
+      try {
+        const current = request.result;
+        if (!current) throw new Error('El reporte no existe para ese ticket.');
+        const at = new Date().toISOString();
+        const positionChanged = details.position.lat !== current.position?.lat
+          || details.position.lng !== current.position?.lng;
+        const report = {
+          ...current,
+          category,
+          description,
+          transcription,
+          references,
+          position: details.position,
+          photos: [...(Array.isArray(current.photos) ? current.photos : []), ...newPhotos],
+          updatedAt: at,
+          receptionEvent: 'Información complementada',
+          history: [
+            ...(Array.isArray(current.history) ? current.history : []),
+            { at, action: positionChanged
+              ? 'Información complementada y ubicación confirmada'
+              : 'Información complementada' },
+          ],
+        };
+        const write = store.put(report);
+        write.onsuccess = () => done(report);
+      } catch (failure) {
+        abort(failure);
+      }
     };
+  }).then((report) => {
+    notifyReportChange({ type: 'updated', ticket });
+    return report;
   });
-  notifyReportCreated();
-  return updated;
 }
 
 export function setReportSeverity(ticket, severity) {
@@ -177,34 +208,81 @@ export function setReportSeverity(ticket, severity) {
       if ((current.severity || '') === severity) { done(current); return; }
       const at = new Date().toISOString();
       const report = { ...current, severity, updatedAt: at, receptionEvent: 'Severidad actualizada',
-        history: [...current.history, { at, action: `Severidad técnica asignada: ${severity || 'Sin clasificar'}` }],
+        history: [...(Array.isArray(current.history) ? current.history : []), { at, action: `Severidad técnica asignada: ${severity || 'Sin clasificar'}` }],
       };
-      store.put(report);
-      done(report);
+      store.put(report); done(report);
     };
-  }).then((updated) => {
-    notifyReportCreated();
-    return updated;
+  }).then((report) => {
+    notifyReportChange({ type: 'updated', ticket });
+    return report;
   });
 }
 
-// Minimal local status transition needed to demonstrate HU-10's resolution subscriptions.
-export async function resolveIncident(ticket) {
-  const updated = await transaction('readwrite', (store, done, fail) => {
+export function confirmIncident(ticket, photos, reporterId) {
+  if (typeof ticket !== 'string' || !ticket.trim()) throw new Error('El ticket del reporte no es válido.');
+  if (typeof reporterId !== 'string' || !reporterId.trim()) throw new Error('No se pudo identificar al participante.');
+  const newPhotos = validatePhotos(photos);
+  return transaction('readwrite', (store, done, fail) => {
     const request = store.get(ticket);
     request.onsuccess = () => {
       const current = request.result;
       if (!current) return fail('El reporte solicitado no existe.');
-      if (!isActiveReport(current)) return fail('Este reporte ya está cerrado.');
+      if (!isActiveReport(current)) return fail('El reporte no admite confirmaciones porque ya está cerrado.');
+      if (current.reporterId && current.reporterId === reporterId) return fail('No puedes confirmar tu propio reporte.');
+      const confirmations = Array.isArray(current.confirmations) ? current.confirmations : [];
+      if (confirmations.some((item) => item.reporterId === reporterId)) {
+        return fail('Ya confirmaste anteriormente este reporte.');
+      }
       const at = new Date().toISOString();
-      const report = { ...current, status: 'Resuelto', resolvedAt: at, updatedAt: at,
-        receptionEvent: 'Incidente resuelto',
-        history: [...current.history, { at, action: 'Incidente marcado como resuelto' }],
+      const updated = {
+        ...current,
+        confirmations: [...confirmations, { reporterId, at, photos: newPhotos }],
+        updatedAt: at,
+        receptionEvent: 'Confirmación ciudadana',
+        history: [...(Array.isArray(current.history) ? current.history : []), { at, action: 'Incidente confirmado por un vecino' }],
       };
-      store.put(report);
-      done(report);
+      store.put(updated);
+      done(updated);
     };
+  }).then((report) => {
+    notifyReportChange({ type: 'updated', ticket });
+    return report;
   });
-  notifyReportCreated();
-  return updated;
+}
+
+export function resolveIncident(ticket) {
+  if (typeof ticket !== 'string' || !ticket.trim()) throw new Error('El ticket del reporte no es válido.');
+  return transaction('readwrite', (store, done, fail) => {
+    const request = store.get(ticket);
+    request.onsuccess = () => {
+      const current = request.result;
+      if (!current) return fail('El reporte solicitado no existe.');
+      if (!isActiveReport(current)) return fail('El reporte ya está cerrado.');
+      const at = new Date().toISOString();
+      const resolved = {
+        ...current,
+        status: 'Resuelto',
+        resolvedAt: at,
+        updatedAt: at,
+        receptionEvent: 'Reporte resuelto',
+        history: [...(Array.isArray(current.history) ? current.history : []), { at, action: 'Reporte marcado como resuelto' }],
+      };
+      store.put(resolved);
+      done(resolved);
+    };
+  }).then((report) => {
+    notifyReportChange({ type: 'updated', ticket });
+    return report;
+  });
+}
+
+// HU-06: filter on an indexed category before performing an exact geographic comparison.
+export function findPotentialDuplicates(position, category, excludeTicket = null) {
+  validatePosition(position);
+  if (!category) return Promise.resolve([]);
+  if (!categories.includes(category)) return Promise.reject(new Error('Selecciona una categoría válida.'));
+  return transaction('readonly', (store, done) => {
+    const request = store.index('category').getAll(category);
+    request.onsuccess = () => done(nearbyMatches(request.result, position, category, excludeTicket));
+  });
 }
