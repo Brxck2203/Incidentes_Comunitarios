@@ -5,60 +5,45 @@
 - Responsable: Joan Cordero Coto.
 - Sprint: 1.
 - Requerimiento: RF-01.
-- Estimación del documento: 5 puntos de historia.
+- Estimación registrada: 5 puntos de historia.
 - Rama: feature/hu-01-registro-voz.
-- Base de creación: main, commit e177150101139574b19be1189627f110f2345219.
-- Fuente de asignación: https://docs.google.com/document/d/1SxqVmyQkNqSJGzvKjUk7TBfGP0-DD-9Y7N0zp3kc_nk/edit
+- Base de creación registrada: main, commit e177150101139574b19be1189627f110f2345219.
+- Fuente de asignación registrada: https://docs.google.com/document/d/1SxqVmyQkNqSJGzvKjUk7TBfGP0-DD-9Y7N0zp3kc_nk/edit
+- La consulta del documento original no se verificó en esta intervención.
 
-## Historia de usuario
+## Funcionalidad heredada de main
 
-Como ciudadano en la vía pública, quiero presionar un botón para grabar una nota de voz y publicar el reporte al instante, para alertar sobre una anomalía sin tener que escribir bajo el sol o condiciones climáticas adversas.
+Al comenzar esta intervención, `feature/hu-01-registro-voz` estaba sincronizada con su rama remota y `origin/main` era ancestro de la rama. El único commit de la rama sobre `origin/main` documentaba la historia. Los archivos de funcionalidad analizados no diferían de `main`; por lo tanto, la captura y el flujo base ya existían allí y no se atribuyen a esta intervención.
 
-## Qué corresponde implementar, completar y validar
+La base incluye grabación desde el micrófono, límite y temporizador de 60 segundos, publicación automática al vencer el tiempo, opción de detener para escuchar, publicación manual, captura fotográfica y persistencia de reportes en IndexedDB con ticket, estado y evidencias.
 
-1. Iniciar la grabación desde el control de micrófono y mostrar el tiempo restante, con un máximo de 60 segundos.
-2. Permitir terminar y publicar sin solicitar campos de texto obligatorios.
-3. Asociar la evidencia de voz con ubicación del dispositivo y fecha/hora, manteniendo separados los errores de grabación, ubicación y almacenamiento.
-4. Confirmar el registro únicamente después de guardar correctamente, mostrando el ticket único y el estado Registrado / Recibido.
-5. Liberar el micrófono y los temporizadores al finalizar o abandonar la pantalla; gestionar permisos denegados, navegador incompatible, audio vacío y fallos de persistencia.
-6. Evitar publicaciones duplicadas por pulsaciones repetidas o por concurrencia entre publicación manual y finalización automática.
+La aplicación registra localmente y no realiza un envío a un servidor municipal.
 
-## Punto de partida existente
+## Correcciones de esta intervención
 
-La base ya incluye grabación, temporizador, almacenamiento local y ticket. El último ajuste incorpora tarjetas con iconos, detención y publicación al volver a pulsar el micrófono, y publicación automática al agotarse el temporizador. No rehacer ni revertir estos cambios: revisar su correspondencia con los criterios del documento y corregir o completar lo necesario. La existencia del código no acredita que las pruebas hayan pasado.
+- La detención de una grabación comparte una sola promesa y solicita `MediaRecorder.stop()` una sola vez. La primera causa de detención gana; si coinciden acciones manuales y temporizador, esa causa determina si la sesión se publica automáticamente. Detener para escuchar primero no publica, salvo que el vencimiento hubiera solicitado la detención antes.
+- La publicación adquiere un bloqueo sincrónico antes de esperar audio o ubicación. Los recorridos del micrófono, “Detener y enviar ahora”, “Publicar reporte” y el temporizador convergen en una sola operación de publicación por vez.
+- Una grabación sin datos utilizables no crea un reporte solo de voz ni confirma una publicación. Se informa que hay que volver a grabar; el flujo de fotografía permanece disponible.
+- Al abandonar la pantalla, la instancia invalida sus continuaciones, limpia temporizador y micrófono, y no publica por la limpieza. Si la ubicación aún está pendiente, no se inicia el guardado. Un guardado que ya empezó no se cancela ni se repite, y no navega desde una pantalla inactiva.
+- El audio capturado se conserva ante fallos de ubicación o persistencia mientras la pantalla siga activa, para permitir reintentar.
 
-La publicación automática al llegar a 60 segundos es un comportamiento de la base, no un criterio adicional atribuido al documento. Validar que respete los acuerdos de interacción y no compita con una publicación manual.
+## Verificaciones realizadas
 
-## Archivos y coordinación
+- `git status` inicial: árbol limpio.
+- Rama actual: `feature/hu-01-registro-voz`.
+- `git fetch origin` y comparación de referencias: rama local y remota sincronizadas; no había commits de `origin/main` pendientes de incorporar.
+- Se confirmó que `origin/main` es ancestro de la rama y se comparó el alcance heredado.
+- Se inspeccionaron los archivos de captura, publicación, ubicación, persistencia, detalle y esta documentación.
+- No se ejecutaron pruebas automatizadas, lint ni build en esta intervención.
 
-- src/hooks/useAudioRecorder.js: captura y ciclo de vida del audio.
-- src/pages/HomePage.jsx: integración de captura rápida; coordinar con Brack, responsable de HU-02.
-- src/services/geolocation.js y src/services/reportRepository.js: contratos compartidos; acordar cambios antes de modificar campos u operaciones.
-- src/components/Evidence.jsx: coordinar reproducción y consulta con HU-04; esta historia se centra en capturar y publicar, no en rehacer el visor.
-- src/App.css: conservar las tarjetas actuales y limitar cambios al alcance de HU-01.
+## Casos manuales pendientes
 
-Extraer componentes pequeños si resulta necesario para reducir ediciones simultáneas de HomePage.jsx, sin imponer una reestructuración general del proyecto.
+Queda pendiente validar en navegador/dispositivo la grabación con permiso concedido y denegado, audio vacío, límite de 60 segundos, coincidencia entre acciones manuales y temporizador, errores de ubicación y almacenamiento, salida durante la obtención de ubicación y durante el guardado, y reproducción/publicación de fotografías. También queda pendiente comprobar el ticket, estado y evidencias de un reporte guardado tras recargar.
 
-## Criterios de aceptación documentales
+Estos casos son verificaciones pendientes, no criterios documentales nuevos. No se afirma que se hayan ejecutado.
 
-- Al pulsar el micrófono comienza la grabación y se muestra el tiempo restante, con máximo de 60 segundos.
-- Al terminar y publicar, el reporte se registra sin campos de texto adicionales obligatorios.
-- Al confirmarse la publicación se muestra el ticket asignado.
+## Alcance e integración
 
-El requisito menciona registro en un servidor municipal. En esta etapa solo se representa el flujo mediante persistencia local; no declarar envío municipal real ni cumplimiento productivo de ese criterio. No añadir estas notas técnicas a las pantallas.
+Los cambios de código de esta intervención se limitan a `src/hooks/useAudioRecorder.js` y `src/pages/HomePage.jsx`; esta documentación registra la diferencia. No se modifican servicios compartidos ni el flujo de detalle y complementación de reportes.
 
-## Validación técnica propuesta
-
-- Probar grabaciones cortas, límite de 60 segundos, detención manual y recuperación tras errores.
-- Probar pulsaciones repetidas y la coincidencia entre detener y agotar el temporizador.
-- Denegar micrófono y ubicación; comprobar que no aparezca una confirmación falsa.
-- Recargar el reporte guardado y comprobar ticket, estado y audio.
-- Probar salida de la pantalla y pestaña en segundo plano; comprobar liberación de recursos y duración efectiva.
-- Revisar controles táctiles, foco visible, contraste y número de interacciones en móvil, sin certificar RNF-01 antes de medirlo.
-- Ejecutar npm run lint y npm run build y registrar los resultados reales en el pull request.
-
-## Reglas de integración
-
-Trabajar únicamente en esta rama. No hacer push directo a main. Abrir un pull request hacia main con referencia a HU-01, cambios realizados, evidencia de pruebas y limitaciones. Actualizar la rama con main antes de integrar y solicitar revisión de otro integrante. No modificar historias ajenas ni presentar el trabajo heredado como implementación nueva.
-
-Este README se ubica en una ruta propia de la historia para no sobrescribir el README general ni los documentos de otras ramas al fusionarlas.
+La rama se deja sin commit ni push para revisión. Cualquier integración posterior corresponde a un pull request hacia `main`, sujeto a revisión.
