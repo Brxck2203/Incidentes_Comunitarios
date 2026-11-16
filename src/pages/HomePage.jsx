@@ -309,7 +309,7 @@ export default function HomePage() {
       <button
         className="publish-button"
         type="button"
-        disabled={busy || voice.starting || Boolean(pendingReport) || (!voice.recording && !voice.audio && !photos.length)}
+        disabled={busy || voice.starting || Boolean(pendingReport) || (!voice.recording && !voice.audio && !draft.photos.length)}
         onClick={() => { void publishReport(); }}
       >
         {busy ? 'Obteniendo ubicación y guardando…' : 'Publicar reporte'}
