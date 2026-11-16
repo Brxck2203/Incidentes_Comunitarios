@@ -37,13 +37,30 @@ export function resolveReportTracking(report, reportsByTicket = {}) {
         ? String(report.consolidation.masterTicket).trim()
         : '');
 
-  if (!masterTicket || masterTicket === report.ticket) {
+  if (masterTicket === report.ticket) {
+    return {
+      ticket: report.ticket,
+      isConsolidatedSecondary: true,
+      masterTicket,
+      masterAvailable: false,
+      masterUnavailable: true,
+      masterUnavailableReason: 'El ticket original no puede ser también su propio expediente maestro.',
+      effectiveStatus: report.status,
+      effectiveUpdatedAt: report.updatedAt,
+      effectiveCategory: report.category,
+      consolidatedAt: report.consolidation?.consolidatedAt ?? report.updatedAt,
+      masterProgressHistory: [],
+    };
+  }
+
+  if (!masterTicket) {
     return {
       ticket: report.ticket,
       isConsolidatedSecondary: false,
       masterTicket: null,
       masterAvailable: false,
       masterUnavailable: false,
+      masterUnavailableReason: '',
       effectiveStatus: report.status,
       effectiveUpdatedAt: report.updatedAt,
       effectiveCategory: report.category,
@@ -61,6 +78,7 @@ export function resolveReportTracking(report, reportsByTicket = {}) {
       masterTicket,
       masterAvailable: false,
       masterUnavailable: true,
+      masterUnavailableReason: 'No se encontró el expediente maestro.',
       effectiveStatus: report.status,
       effectiveUpdatedAt: report.updatedAt,
       effectiveCategory: report.category,
@@ -134,14 +152,28 @@ export async function getConsolidatedTrackingForTicket(ticket) {
         : '');
 
   const reportsByTicket = { [report.ticket]: report };
+  let masterUnavailableReason = '';
 
   if (masterTicket && masterTicket !== report.ticket) {
-    const masterReport = await getReport(masterTicket);
-    if (masterReport) {
-      reportsByTicket[masterTicket] = masterReport;
+    try {
+      const masterReport = await getReport(masterTicket);
+      if (masterReport) {
+        reportsByTicket[masterTicket] = masterReport;
+      } else {
+        masterUnavailableReason = 'No se encontró el expediente maestro.';
+      }
+    } catch (failure) {
+      const reason = failure instanceof Error ? failure.message : String(failure);
+      masterUnavailableReason = `No se pudo leer el expediente maestro: ${reason}`;
     }
   }
 
-  const tracking = resolveReportTracking(report, reportsByTicket);
+  const resolvedTracking = resolveReportTracking(report, reportsByTicket);
+  const tracking = resolvedTracking?.masterUnavailable
+    ? {
+        ...resolvedTracking,
+        masterUnavailableReason: masterUnavailableReason || resolvedTracking.masterUnavailableReason,
+      }
+    : resolvedTracking;
   return { report, tracking };
 }

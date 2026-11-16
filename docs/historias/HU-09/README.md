@@ -58,3 +58,11 @@ Implementar el seguimiento demostrable con datos locales, sin backend, notificac
 Trabajar únicamente en esta rama y abrir pull request hacia main con referencia a HU-09. No hacer push directo a main. Actualizar con main antes de integrar, resolver dependencias y solicitar revisión de otro integrante. Crear la rama y este README no significa que la historia esté implementada.
 
 Este README ocupa una ruta propia para conservar el README general y no sobrescribir documentos de otras historias al fusionar.
+
+## Integración sobre HU-08
+
+La rama se actualizó desde `main` después de incorporar HU-08. La consulta comienza por el ticket original: Mis reportes permite buscar por ticket y muestra el estado del maestro para tickets secundarios; el detalle vuelve a consultar el maestro y presenta su estado vigente y una bitácora saneada. El identificador, las evidencias y los datos propios del ticket original se conservan.
+
+Los vínculos faltantes, inválidos o no legibles se muestran como seguimiento no disponible y no se reemplazan por un avance supuesto. En ese caso se mantiene el estado del ticket original. El mecanismo opera sobre IndexedDB local; no implica sincronización entre dispositivos ni notificación municipal externa.
+
+Verificaciones de esta integración: 5 pruebas unitarias de seguimiento, 10 pruebas del conjunto `tests/*.test.js` y `npm run build` aprobados. `npm run lint` terminó con advertencias existentes en `IncidentMap.jsx`, `Evidence.jsx` y `ReportDetailPage.jsx`. La validación manual de interfaz y los casos de lectura fallida del maestro siguen pendientes; no se certifica el cumplimiento de los criterios documentales completos.

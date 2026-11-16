@@ -113,3 +113,14 @@ test('resolveReportTracking maneja de forma segura cuando el caso maestro refere
   assert.equal(tracking.masterUnavailable, true);
   assert.equal(tracking.effectiveStatus, 'Registrado / Recibido');
 });
+
+test('resolveReportTracking marca como inválida la relación donde un ticket se declara su propio maestro', () => {
+  const invalid = createBaseReport('RC-500', { masterTicket: 'RC-500' });
+  const tracking = resolveReportTracking(invalid, { 'RC-500': invalid });
+
+  assert.equal(tracking.isConsolidatedSecondary, true);
+  assert.equal(tracking.masterUnavailable, true);
+  assert.equal(tracking.masterUnavailableReason, 'El ticket original no puede ser también su propio expediente maestro.');
+  assert.equal(tracking.effectiveStatus, invalid.status);
+  assert.equal(tracking.masterProgressHistory.length, 0);
+});

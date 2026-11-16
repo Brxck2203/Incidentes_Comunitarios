@@ -18,7 +18,7 @@ export default function JointAttentionPanel({ tracking }) {
       <div className="joint-attention-header">
         <span className="joint-attention-badge">Atención conjunta</span>
         <h2 id="joint-attention-title">
-          Tu reporte fue integrado a una orden de atención conjunta
+          Seguimiento del expediente maestro
         </h2>
       </div>
 
@@ -28,13 +28,13 @@ export default function JointAttentionPanel({ tracking }) {
         <Link to={`/reportes/${tracking.masterTicket}`}>
           <strong>{tracking.masterTicket}</strong>
         </Link>{' '}
-        para coordinar una sola cuadrilla de atención en el punto reportado.
+        para consultar el avance asociado sin reemplazar tu ticket original.
       </p>
 
       {tracking.masterUnavailable ? (
         <p className="error-message" role="alert">
-          No se pudo consultar en este momento el detalle del expediente maestro ({tracking.masterTicket}). Se muestra
-          el último estado registrado en tu ticket.
+          {tracking.masterUnavailableReason || `No se pudo consultar el expediente maestro (${tracking.masterTicket}).`}
+          {' '}Se muestra el estado registrado en tu ticket.
         </p>
       ) : (
         <>
