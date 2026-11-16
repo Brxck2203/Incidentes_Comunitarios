@@ -56,3 +56,7 @@ Conservar versiones separadas de la prueba de concepto y la entrega final. No ma
 ## Integración de HU-06, HU-10 y HU-14 (16/11/2026)
 
 La corrección del último `main` restaura la alerta de duplicidad, las confirmaciones ciudadanas y la calificación de severidad con priorización municipal. Ejecuta `npm test` para las pruebas automatizadas disponibles. Los cambios, limitaciones y controles antes de integrar al repositorio están documentados en [`docs/INTEGRACION_MAIN_2026-11-16.md`](docs/INTEGRACION_MAIN_2026-11-16.md).
+
+## Gestión municipal local — HU-11, HU-12 y HU-13
+
+Recepción coordina filtros, lista y mapa, y permite registrar decisiones municipales con trazabilidad local. Las reglas de transición, los límites del catálogo geográfico y los alcances de la respuesta ciudadana se documentan en [`docs/gestion-municipal.md`](docs/gestion-municipal.md).

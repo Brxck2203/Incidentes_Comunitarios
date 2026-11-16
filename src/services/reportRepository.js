@@ -1,6 +1,7 @@
 import { notifyReportChange } from './reportNotifications.js';
 import { isActiveReport, severityLevels } from './reportPriority.js';
 import { nearbyMatches } from './reportDuplicates.js';
+import { applyMunicipalDecision, isSecondaryReport } from './municipalDecisions.js';
 
 export const categories = ['Baches', 'Basura clandestina', 'Ramas/arbolado', 'Aceras dañadas'];
 
@@ -202,16 +203,22 @@ export function setReportSeverity(ticket, severity) {
   return transaction('readwrite', (store, done, fail) => {
     const request = store.get(ticket);
     request.onsuccess = () => {
-      const current = request.result;
-      if (!current) return fail('El reporte solicitado no existe.');
-      if (!isActiveReport(current)) return fail('No se puede cambiar la severidad de un incidente cerrado.');
-      if ((current.severity || '') === severity) { done(current); return; }
-      const at = new Date().toISOString();
-      const report = { ...current, severity, updatedAt: at, receptionEvent: 'Severidad actualizada',
-        history: [...(Array.isArray(current.history) ? current.history : []), { at, action: `Severidad técnica asignada: ${severity || 'Sin clasificar'}` }],
-      };
-      store.put(report); done(report);
+      try {
+        const current = request.result;
+        if (!current) return fail('El reporte solicitado no existe.');
+        if (isSecondaryReport(current)) return fail('La severidad se actualiza desde el expediente maestro.');
+        if (!isActiveReport(current)) return fail('No se puede cambiar la severidad de un incidente cerrado.');
+        if ((current.severity || '') === severity) { done(current); return; }
+        const at = new Date().toISOString();
+        const report = { ...current, severity, updatedAt: at, receptionEvent: 'Severidad actualizada',
+          history: [...(Array.isArray(current.history) ? current.history : []), { at, action: `Severidad técnica asignada: ${severity || 'Sin clasificar'}` }],
+        };
+        store.put(report); done(report);
+      } catch (failure) {
+        fail(failure);
+      }
     };
+    request.onerror = () => fail('No se pudo leer el reporte solicitado.');
   }).then((report) => {
     notifyReportChange({ type: 'updated', ticket });
     return report;
@@ -225,25 +232,54 @@ export function confirmIncident(ticket, photos, reporterId) {
   return transaction('readwrite', (store, done, fail) => {
     const request = store.get(ticket);
     request.onsuccess = () => {
-      const current = request.result;
-      if (!current) return fail('El reporte solicitado no existe.');
-      if (!isActiveReport(current)) return fail('El reporte no admite confirmaciones porque ya está cerrado.');
-      if (current.reporterId && current.reporterId === reporterId) return fail('No puedes confirmar tu propio reporte.');
-      const confirmations = Array.isArray(current.confirmations) ? current.confirmations : [];
-      if (confirmations.some((item) => item.reporterId === reporterId)) {
-        return fail('Ya confirmaste anteriormente este reporte.');
+      try {
+        const current = request.result;
+        if (!current) return fail('El reporte solicitado no existe.');
+        const saveConfirmation = () => {
+          if (!isActiveReport(current)) return fail('El reporte no admite confirmaciones porque ya está cerrado.');
+          if (current.reporterId && current.reporterId === reporterId) return fail('No puedes confirmar tu propio reporte.');
+          const confirmations = Array.isArray(current.confirmations) ? current.confirmations : [];
+          if (confirmations.some((item) => item.reporterId === reporterId)) {
+            return fail('Ya confirmaste anteriormente este reporte.');
+          }
+          const at = new Date().toISOString();
+          const updated = {
+            ...current,
+            confirmations: [...confirmations, { reporterId, at, photos: newPhotos }],
+            updatedAt: at,
+            receptionEvent: 'Confirmación ciudadana',
+            history: [...(Array.isArray(current.history) ? current.history : []), { at, action: 'Incidente confirmado por un vecino' }],
+          };
+          store.put(updated);
+          done(updated);
+        };
+        const hasMasterRelation = isSecondaryReport(current);
+        const masterTicket = current.masterTicket
+          || (current.consolidation?.role === 'secondary' ? current.consolidation.masterTicket : '');
+        if (!hasMasterRelation) {
+          saveConfirmation();
+          return;
+        }
+        if (typeof masterTicket !== 'string' || !masterTicket.trim()) {
+          return fail('El reporte no admite confirmaciones porque su expediente maestro no está disponible.');
+        }
+        const masterRequest = store.get(masterTicket);
+        masterRequest.onsuccess = () => {
+          try {
+            if (!masterRequest.result || !isActiveReport(masterRequest.result)) {
+              return fail('El reporte no admite confirmaciones porque su expediente maestro está cerrado o no disponible.');
+            }
+            saveConfirmation();
+          } catch (failure) {
+            fail(failure);
+          }
+        };
+        masterRequest.onerror = () => fail('No se pudo verificar el estado del expediente maestro.');
+      } catch (failure) {
+        fail(failure);
       }
-      const at = new Date().toISOString();
-      const updated = {
-        ...current,
-        confirmations: [...confirmations, { reporterId, at, photos: newPhotos }],
-        updatedAt: at,
-        receptionEvent: 'Confirmación ciudadana',
-        history: [...(Array.isArray(current.history) ? current.history : []), { at, action: 'Incidente confirmado por un vecino' }],
-      };
-      store.put(updated);
-      done(updated);
     };
+    request.onerror = () => fail('No se pudo leer el reporte solicitado.');
   }).then((report) => {
     notifyReportChange({ type: 'updated', ticket });
     return report;
@@ -255,23 +291,53 @@ export function resolveIncident(ticket) {
   return transaction('readwrite', (store, done, fail) => {
     const request = store.get(ticket);
     request.onsuccess = () => {
-      const current = request.result;
-      if (!current) return fail('El reporte solicitado no existe.');
-      if (!isActiveReport(current)) return fail('El reporte ya está cerrado.');
-      const at = new Date().toISOString();
-      const resolved = {
-        ...current,
-        status: 'Resuelto',
-        resolvedAt: at,
-        updatedAt: at,
-        receptionEvent: 'Reporte resuelto',
-        history: [...(Array.isArray(current.history) ? current.history : []), { at, action: 'Reporte marcado como resuelto' }],
-      };
-      store.put(resolved);
-      done(resolved);
+      try {
+        const current = request.result;
+        if (!current) return fail('El reporte solicitado no existe.');
+        if (isSecondaryReport(current)) return fail('La resolución se registra desde el expediente maestro.');
+        if (!isActiveReport(current)) return fail('El reporte ya está cerrado.');
+        const at = new Date().toISOString();
+        const resolved = {
+          ...current,
+          status: 'Resuelto',
+          resolvedAt: at,
+          updatedAt: at,
+          receptionEvent: 'Reporte resuelto',
+          history: [...(Array.isArray(current.history) ? current.history : []), { at, action: 'Reporte marcado como resuelto' }],
+        };
+        store.put(resolved);
+        done(resolved);
+      } catch (failure) {
+        fail(failure);
+      }
     };
+    request.onerror = () => fail('No se pudo leer el reporte solicitado.');
   }).then((report) => {
     notifyReportChange({ type: 'updated', ticket });
+    return report;
+  });
+}
+
+export function recordMunicipalDecision(ticket, input) {
+  if (typeof ticket !== 'string' || !ticket.trim() || ticket.length > 128) {
+    throw new Error('El ticket del reporte no es válido.');
+  }
+  return transaction('readwrite', (store, done, abort) => {
+    const request = store.get(ticket);
+    request.onsuccess = () => {
+      try {
+        const current = request.result;
+        if (!current) throw new Error('El reporte solicitado no existe.');
+        const result = applyMunicipalDecision(current, input);
+        if (result.changed) store.put(result.report);
+        done(result);
+      } catch (failure) {
+        abort(failure);
+      }
+    };
+    request.onerror = () => abort(new Error('No se pudo leer el reporte solicitado.'));
+  }).then(({ report, changed }) => {
+    if (changed) notifyReportChange({ type: 'updated', ticket });
     return report;
   });
 }

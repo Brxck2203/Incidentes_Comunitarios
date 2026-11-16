@@ -25,6 +25,6 @@ export function sortReceptionReports(reports) {
     return Number(isActiveReport(b)) - Number(isActiveReport(a))
       || bb.level - aa.level
       || bb.supporters - aa.supporters
-      || a.createdAt.localeCompare(b.createdAt);
+      || String(a.createdAt ?? '').localeCompare(String(b.createdAt ?? ''));
   });
 }

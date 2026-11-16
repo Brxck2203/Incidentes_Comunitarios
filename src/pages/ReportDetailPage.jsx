@@ -3,6 +3,7 @@ import { Link, useLocation, useParams } from 'react-router-dom';
 import { categories, complementReport, findPotentialDuplicates, getCurrentReporterId, validatePhotos } from '../services/reportRepository.js';
 import { getConsolidatedTrackingForTicket } from '../services/consolidatedTracking.js';
 import { endorsementCount, isActiveReport } from '../services/reportPriority.js';
+import { hasValidCoordinates } from '../services/municipalConsole.js';
 import { detectDuplicatesForTicket } from '../services/duplicateDetection.js';
 import DuplicateWarning from '../components/DuplicateWarning.jsx';
 import DuplicateComparisonPanel from '../components/DuplicateComparisonPanel.jsx';
@@ -11,11 +12,19 @@ import ConsolidatedEvidenceSection from '../components/ConsolidatedEvidenceSecti
 import JointAttentionPanel from '../components/JointAttentionPanel.jsx';
 import Evidence from '../components/Evidence.jsx';
 import LocationMap from '../components/LocationMap.jsx';
+import MunicipalDecisionPanel from '../components/MunicipalDecisionPanel.jsx';
+import { subscribeToReportChanges } from '../services/reportNotifications.js';
+
+function formatDateTime(value) {
+  if (!value) return 'No disponible';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'No disponible' : date.toLocaleString('es-CR');
+}
 
 export default function ReportDetailPage() {
   const { ticket } = useParams();
   const location = useLocation();
-  const fromReception = Boolean(location.state?.fromReception);
+  const fromReception = Boolean(location.state?.fromReception || location.pathname.startsWith('/recepcion/'));
   const [report, setReport] = useState(null);
   const [tracking, setTracking] = useState(null);
   const [draft, setDraft] = useState(null);
@@ -51,28 +60,36 @@ export default function ReportDetailPage() {
 
   useEffect(() => {
     let active = true;
+    let requestSequence = 0;
     currentTicketRef.current = ticket;
     setLoading(true); setError(''); setEditing(false); setReport(null); setDraft(null);
     setMessage(''); setPhotos([]); setPhotoSelectionNotice('');
     setConfirmOpen(Boolean(location.state?.confirm));
     setPendingEdit(null); setNearbyDraftMatches([]);
     async function loadTracking() {
+      const currentSequence = ++requestSequence;
       try {
         const result = await getConsolidatedTrackingForTicket(ticket);
-        if (active) {
+        if (active && currentSequence === requestSequence && currentTicketRef.current === ticket) {
           setReport(result.report);
           setTracking(result.tracking);
           setError('');
         }
       } catch (failure) {
-        if (active) setError(failure.message);
+        if (active && currentSequence === requestSequence && currentTicketRef.current === ticket) setError(failure.message);
       } finally {
-        if (active) setLoading(false);
+        if (active && currentSequence === requestSequence && currentTicketRef.current === ticket) setLoading(false);
       }
     }
     void loadTracking();
     window.addEventListener('focus', loadTracking);
-    return () => { active = false; window.removeEventListener('focus', loadTracking); };
+    const unsubscribe = subscribeToReportChanges(loadTracking);
+    return () => {
+      active = false;
+      requestSequence += 1;
+      window.removeEventListener('focus', loadTracking);
+      unsubscribe();
+    };
   }, [ticket, location.state?.confirm]);
   useEffect(() => {
     if (!report?.ticket) return undefined;
@@ -162,6 +179,12 @@ export default function ReportDetailPage() {
   }
   if (loading) return <p role="status">Cargando reporte…</p>;
   if (!report) return <section><h1>Reporte no disponible</h1><p role="alert">{error || 'No se encontró el ticket solicitado.'}</p><Link to={fromReception ? '/recepcion' : '/reportes'}>{fromReception ? 'Volver a recepción de reportes' : 'Volver a mis reportes'}</Link></section>;
+  const reportStatus = tracking?.masterUnavailable
+    ? 'Estado del maestro no disponible'
+    : tracking?.effectiveStatus ?? report.status ?? 'Estado no disponible';
+  const effectiveReportIsActive = !tracking?.masterUnavailable
+    && isActiveReport({ ...report, status: tracking?.effectiveStatus ?? report.status });
+  const masterTicket = report.masterTicket || report.consolidation?.masterTicket;
   return <section>
     <Link className="text-link" to={fromReception ? '/recepcion' : '/reportes'}>
       {fromReception ? 'Volver a recepción de reportes' : 'Volver a mis reportes'}
@@ -169,18 +192,38 @@ export default function ReportDetailPage() {
     <h1>Detalle del reporte</h1>
     {location.state?.created && <p className="success-message" role="status">Reporte guardado. Conserva tu código de seguimiento.</p>}
     <p className="ticket">{report.ticket}</p>
-    <p>{tracking?.effectiveStatus ?? report.status} · {new Date(report.createdAt).toLocaleString('es-CR')}</p>
-    <p>Última actualización: {new Date(tracking?.effectiveUpdatedAt ?? report.updatedAt).toLocaleString('es-CR')}</p>
-    <JointAttentionPanel tracking={tracking} />
-    {report.masterTicket && <p className="consolidated-secondary-banner" role="status">
+    <p>{reportStatus} · {formatDateTime(report.createdAt)}</p>
+    <p>Última actualización: {formatDateTime(tracking?.masterUnavailable ? null : tracking?.effectiveUpdatedAt ?? report.updatedAt)}</p>
+    <JointAttentionPanel tracking={tracking} municipalView={fromReception} />
+    {masterTicket && <p className="consolidated-secondary-banner" role="status">
       Este reporte está enlazado como solicitud secundaria al expediente principal{' '}
-      <Link to={`/reportes/${report.masterTicket}`} state={{ fromReception }}>
-        <strong>{report.masterTicket}</strong>
+      <Link to={fromReception
+        ? `/recepcion/${encodeURIComponent(masterTicket)}`
+        : `/reportes/${encodeURIComponent(masterTicket)}`}>
+        <strong>{masterTicket}</strong>
       </Link>.
     </p>}
     {error && <p className="error-message" role="alert">{error}</p>}
     {message && <p className="success-message" role="status">{message}</p>}
-    <JointAttentionPanel tracking={tracking} />
+    {tracking?.effectiveDecision?.publicResponse && <section className="public-decision" aria-labelledby="public-decision-title">
+      <h2 id="public-decision-title">Respuesta de Recepción</h2>
+      <p>{tracking.effectiveDecision.publicResponse}</p>
+      {tracking.effectiveDecision.at && <p>Registrada el {formatDateTime(tracking.effectiveDecision.at)}.</p>}
+    </section>}
+    <MunicipalDecisionPanel key={report.ticket} report={report} municipalView={fromReception} onSaved={(updated) => {
+      if (currentTicketRef.current !== updated.ticket) return;
+      setReport(updated);
+      setTracking((current) => current ? { ...current, effectiveStatus: updated.status,
+        effectiveUpdatedAt: updated.updatedAt,
+        effectiveDecision: {
+          action: updated.municipalDecision.action,
+          status: updated.municipalDecision.status,
+          at: updated.municipalDecision.at,
+          cause: updated.municipalDecision.cause || '',
+          justification: updated.municipalDecision.justification || '',
+          publicResponse: updated.municipalDecision.publicResponse,
+        } } : current);
+    }} />
     {duplicateLoading && <p role="status">Verificando posibles reportes duplicados…</p>}
     {duplicateStateCurrent && duplicateResult.error && <p className="error-message" role="alert">{duplicateResult.error}</p>}
     {duplicateStateCurrent && duplicateResult.info.isSuspectedDuplicate && (
@@ -202,12 +245,12 @@ export default function ReportDetailPage() {
     </>}
     {report.severity && <p>Severidad técnica: <strong>{report.severity}</strong></p>}
     {endorsementCount(report) > 0 && <p>Vecinos que confirmaron: {endorsementCount(report)}</p>}
-    {isActiveReport(report) && report.reporterId !== viewerId && !report.confirmations?.some((confirmation) => confirmation.reporterId === viewerId) && (
+    {effectiveReportIsActive && report.reporterId !== viewerId && !report.confirmations?.some((confirmation) => confirmation.reporterId === viewerId) && (
       <button type="button" onClick={() => setConfirmOpen((open) => !open)}>
         {confirmOpen ? 'Cerrar confirmación' : 'Confirmar incidente'}
       </button>
     )}
-    {confirmOpen && isActiveReport(report) && report.reporterId !== viewerId && (
+    {confirmOpen && effectiveReportIsActive && report.reporterId !== viewerId && (
       <ConfirmIncidentForm
         ticket={report.ticket}
         onConfirmed={(updated) => {
@@ -268,10 +311,13 @@ export default function ReportDetailPage() {
       <p className="preserve-lines">{report.description || 'Sin descripción adicional.'}</p>
       {report.transcription && <p className="preserve-lines">Nota: {report.transcription}</p>}
       {report.references && <p className="preserve-lines">Referencias: {report.references}</p>}
-      <h2>Ubicación</h2><LocationMap position={report.position} />
-      <p>Latitud: {report.position.lat.toFixed(6)} · Longitud: {report.position.lng.toFixed(6)}</p>
+      <h2>Ubicación</h2>
+      {hasValidCoordinates(report.position)
+        ? <><LocationMap position={report.position} />
+          <p>Latitud: {report.position.lat.toFixed(6)} · Longitud: {report.position.lng.toFixed(6)}</p></>
+        : <p>Ubicación no disponible.</p>}
       {Number.isFinite(report.originalPosition?.accuracy) && <p>Precisión original del dispositivo: {Math.round(report.originalPosition.accuracy)} metros.</p>}
-      <button type="button" onClick={() => {
+      {hasValidCoordinates(report.position) && <button type="button" onClick={() => {
         setDraft({
           category: report.category || '',
           description: report.description || '',
@@ -280,9 +326,9 @@ export default function ReportDetailPage() {
           position: { ...report.position },
         });
         setEditing(true); setMessage(''); setPhotoSelectionNotice(''); setPendingEdit(null);
-      }}>Agregar más detalles</button>
+      }}>Agregar más detalles</button>}
     </>}
     <h2>Historial de actualizaciones</h2>
-    <ol>{(report.history || []).map((entry, index) => <li key={index}>{new Date(entry.at).toLocaleString('es-CR')} · {entry.action}</li>)}</ol>
+    <ol>{(report.history || []).map((entry, index) => <li key={index}>{formatDateTime(entry.at)} · {entry.action}</li>)}</ol>
   </section>;
 }

@@ -1,7 +1,6 @@
-// TODO: integrar con consola municipal cuando se integre HU-11
-// TODO: reutilizar contrato de masterTicket y secondaryTickets cuando se integre HU-09
-
 import { notifyReportChange } from './reportNotifications.js';
+import { isActiveReport } from './reportPriority.js';
+import { isSecondaryReport } from './municipalDecisions.js';
 
 export const DEFAULT_OFFICIAL_NAME = 'Gestor municipal';
 
@@ -75,10 +74,16 @@ export function applyConsolidationToRecords({
     throw new Error(`No se encontró el reporte maestro seleccionado (${validated.masterTicket}).`);
   }
 
-  if (masterCurrent.masterTicket) {
+  if (isSecondaryReport(masterCurrent)) {
+    const linkedMasterTicket = masterCurrent.masterTicket || masterCurrent.consolidation?.masterTicket;
     throw new Error(
-      `El reporte ${validated.masterTicket} ya es secundario del expediente maestro ${masterCurrent.masterTicket} y no puede ser caso maestro.`,
+      linkedMasterTicket
+        ? `El reporte ${validated.masterTicket} ya es secundario del expediente maestro ${linkedMasterTicket} y no puede ser caso maestro.`
+        : `El reporte ${validated.masterTicket} tiene una relación secundaria sin expediente maestro disponible y no puede ser caso maestro.`,
     );
+  }
+  if (!isActiveReport(masterCurrent)) {
+    throw new Error(`El reporte ${validated.masterTicket} está cerrado y no puede ser caso maestro.`);
   }
 
   const secondaryCurrentList = [];
@@ -87,9 +92,15 @@ export function applyConsolidationToRecords({
     if (!secReport) {
       throw new Error(`No se encontró el reporte seleccionado (${secTicket}).`);
     }
-    if (secReport.masterTicket && secReport.masterTicket !== validated.masterTicket) {
+    if (!isActiveReport(secReport)) {
+      throw new Error(`El reporte ${secTicket} está cerrado y no puede consolidarse.`);
+    }
+    if (isSecondaryReport(secReport)) {
+      const linkedMasterTicket = secReport.masterTicket || secReport.consolidation?.masterTicket;
       throw new Error(
-        `El reporte ${secTicket} ya fue consolidado previamente bajo el expediente maestro ${secReport.masterTicket}.`,
+        linkedMasterTicket
+          ? `El reporte ${secTicket} ya fue consolidado previamente bajo el expediente maestro ${linkedMasterTicket}.`
+          : `El reporte ${secTicket} tiene una relación secundaria sin expediente maestro disponible y no puede consolidarse.`,
       );
     }
     if (Array.isArray(secReport.secondaryTickets) && secReport.secondaryTickets.length > 0) {

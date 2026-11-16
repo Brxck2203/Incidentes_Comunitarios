@@ -140,6 +140,25 @@ test('applyConsolidationToRecords rechaza consolidar si un reporte ya es secunda
   );
 });
 
+test('applyConsolidationToRecords rechaza estados terminales como maestro o secundario', () => {
+  const open = createSampleReport('RC-open');
+  const dismissed = createSampleReport('RC-dismissed', { status: 'Desestimado' });
+  const resolved = createSampleReport('RC-resolved', { status: 'Resuelto' });
+
+  assert.throws(() => applyConsolidationToRecords({
+    reportsByTicket: { 'RC-open': open, 'RC-dismissed': dismissed },
+    tickets: ['RC-open', 'RC-dismissed'],
+    masterTicket: 'RC-dismissed',
+    reason: 'Mismo evento',
+  }), /cerrado y no puede ser caso maestro/i);
+  assert.throws(() => applyConsolidationToRecords({
+    reportsByTicket: { 'RC-open': open, 'RC-resolved': resolved },
+    tickets: ['RC-open', 'RC-resolved'],
+    masterTicket: 'RC-open',
+    reason: 'Mismo evento',
+  }), /cerrado y no puede consolidarse/i);
+});
+
 test('applyConsolidationToRecords permite agregar un nuevo secundario a un caso maestro existente sin duplicar vínculos previos', () => {
   const r1 = createSampleReport('RC-001');
   const r2 = createSampleReport('RC-002');
