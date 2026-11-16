@@ -1,4 +1,4 @@
-import { notifyReportCreated } from './reportNotifications.js';
+import { notifyReportChange } from './reportNotifications.js';
 
 export const categories = ['Baches', 'Basura clandestina', 'Ramas/arbolado', 'Aceras dañadas'];
 
@@ -16,13 +16,46 @@ function openDatabase() {
 async function transaction(mode, action) {
   const database = await openDatabase();
   return new Promise((resolve, reject) => {
-    const tx = database.transaction('reports', mode);
+    let tx;
+    try {
+      tx = database.transaction('reports', mode);
+    } catch {
+      database.close();
+      reject(new Error('No se pudo iniciar la operación del reporte.'));
+      return;
+    }
     let result;
-    tx.oncomplete = () => { database.close(); resolve(result); };
-    tx.onabort = () => { database.close(); reject(new Error('No se pudo guardar o consultar el reporte. Revisa el espacio disponible e inténtalo de nuevo.')); };
+    let failure = null;
+    let settled = false;
+    tx.oncomplete = () => {
+      database.close();
+      settled = true;
+      resolve(result);
+    };
+    tx.onabort = () => {
+      database.close();
+      if (settled) return;
+      settled = true;
+      reject(failure || new Error('No se pudo guardar o consultar el reporte. Revisa el espacio disponible e inténtalo de nuevo.'));
+    };
     tx.onerror = () => {};
-    try { action(tx.objectStore('reports'), (value) => { result = value; }); }
-    catch (error) { tx.abort(); reject(error); }
+    const abort = (error) => {
+      failure = error instanceof Error ? error : new Error('No se pudo actualizar el reporte.');
+      try {
+        tx.abort();
+      } catch {
+        database.close();
+        if (!settled) {
+          settled = true;
+          reject(failure);
+        }
+      }
+    };
+    try {
+      action(tx.objectStore('reports'), (value) => { result = value; }, abort);
+    } catch (error) {
+      abort(error);
+    }
   });
 }
 
@@ -74,28 +107,68 @@ export async function createReport({ audio, photos, position, capturedAt } = {})
     history: [{ at: createdAt, action: 'Reporte registrado' }],
   };
   await transaction('readwrite', (store) => store.add(report));
-  notifyReportCreated();
+  notifyReportChange({ type: 'created', ticket });
   return report;
 }
 
 export function complementReport(ticket, details, photos) {
+  if (typeof ticket !== 'string' || !ticket.trim()) throw new Error('El ticket del reporte no es válido.');
+  if (!details || typeof details !== 'object' || Array.isArray(details)) {
+    throw new Error('Los datos de complementación no son válidos.');
+  }
+  const optionalText = (value, label, maxLength) => {
+    if (value == null) return '';
+    if (typeof value !== 'string') throw new Error(`${label} debe ser texto.`);
+    if (value.length > maxLength) throw new Error(`${label} no puede superar ${maxLength} caracteres.`);
+    const text = value.trim();
+    return text;
+  };
+  const description = optionalText(details.description, 'La descripción', 5000);
+  const transcription = optionalText(details.transcription, 'El complemento de la nota', 5000);
+  const references = optionalText(details.references, 'Las señas o referencias', 2000);
+  const category = details.category ?? '';
+  if (typeof category !== 'string') throw new Error('Selecciona una categoría válida.');
+  if (category && !categories.includes(category)) throw new Error('Selecciona una categoría válida.');
   validatePosition(details.position);
-  if (details.category && !categories.includes(details.category)) throw new Error('Selecciona una categoría válida.');
-  return transaction('readwrite', (store, done) => {
+  if (photos != null && typeof photos[Symbol.iterator] !== 'function') {
+    throw new Error('La selección de fotografías no es válida.');
+  }
+  const newPhotos = validatePhotos(photos);
+
+  return transaction('readwrite', (store, done, abort) => {
     const request = store.get(ticket);
     request.onsuccess = () => {
-      const current = request.result;
-      if (!current) { request.transaction.abort(); return; }
-      const at = new Date().toISOString();
-      const report = { ...current,
-        category: details.category, description: details.description.trim(),
-        transcription: details.transcription.trim(), references: details.references.trim(),
-        position: details.position, photos: [...current.photos, ...photos], updatedAt: at,
-        receptionEvent: 'Información complementada',
-        history: [...current.history, { at, action: 'Información complementada y ubicación confirmada' }],
-      };
-      store.put(report);
-      done(report);
+      try {
+        const current = request.result;
+        if (!current) throw new Error('No se encontró el reporte para ese ticket.');
+        const at = new Date().toISOString();
+        const positionChanged = details.position.lat !== current.position?.lat
+          || details.position.lng !== current.position?.lng;
+        const report = {
+          ...current,
+          category,
+          description,
+          transcription,
+          references,
+          position: details.position,
+          photos: [...(Array.isArray(current.photos) ? current.photos : []), ...newPhotos],
+          updatedAt: at,
+          receptionEvent: 'Información complementada',
+          history: [
+            ...(Array.isArray(current.history) ? current.history : []),
+            { at, action: positionChanged
+              ? 'Información complementada y ubicación confirmada'
+              : 'Información complementada' },
+          ],
+        };
+        const write = store.put(report);
+        write.onsuccess = () => done(report);
+      } catch (failure) {
+        abort(failure);
+      }
     };
+  }).then((report) => {
+    notifyReportChange({ type: 'updated', ticket });
+    return report;
   });
 }

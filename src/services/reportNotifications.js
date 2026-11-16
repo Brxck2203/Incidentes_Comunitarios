@@ -2,9 +2,11 @@ const REPORTS_CHANGED_EVENT = 'community-reports:changed';
 const REPORTS_CHANNEL = 'community-reports';
 const sourceId = `${Date.now()}-${Math.random()}`;
 
-export function notifyReportCreated() {
+export function notifyReportChange({ type, ticket }) {
+  const eventType = type === 'created' ? 'report-created' : 'report-updated';
+  const metadata = { type: eventType, ticket };
   try {
-    window.dispatchEvent(new Event(REPORTS_CHANGED_EVENT));
+    window.dispatchEvent(new CustomEvent(REPORTS_CHANGED_EVENT, { detail: metadata }));
   } catch (failure) {
     console.warn('El reporte se guardó, pero no se pudo actualizar esta pestaña.', failure);
   }
@@ -13,7 +15,7 @@ export function notifyReportCreated() {
   let channel;
   try {
     channel = new BroadcastChannel(REPORTS_CHANNEL);
-    channel.postMessage({ type: 'report-created', sourceId });
+    channel.postMessage({ ...metadata, sourceId });
   } catch (failure) {
     console.warn('El reporte se guardó, pero no se pudo notificar a otras pestañas.', failure);
   }
@@ -33,7 +35,7 @@ export function subscribeToReportChanges(onChange) {
     try {
       channel = new BroadcastChannel(REPORTS_CHANNEL);
       channel.addEventListener('message', ({ data }) => {
-        if (data?.type === 'report-created' && data.sourceId !== sourceId) onChange();
+        if (['report-created', 'report-updated'].includes(data?.type) && data.sourceId !== sourceId) onChange();
       });
     } catch (failure) {
       console.warn('No se pudo iniciar la notificación entre pestañas; se usará la actualización periódica.', failure);
