@@ -52,3 +52,7 @@ JPG, PNG, WebP o AVIF; hasta ocho fotos por selección y 10 MB por foto. Son lí
 8. Ejecutar lint y build. No se han ejecutado desde el conector de GitHub.
 
 Conservar versiones separadas de la prueba de concepto y la entrega final. No marcar estos requerimientos como certificados hasta completar la validación.
+
+## Integración de HU-06, HU-10 y HU-14 (16/11/2026)
+
+La corrección del último `main` restaura la alerta de duplicidad, las confirmaciones ciudadanas y la calificación de severidad con priorización municipal. Ejecuta `npm test` para las pruebas automatizadas disponibles. Los cambios, limitaciones y controles antes de integrar al repositorio están documentados en [`docs/INTEGRACION_MAIN_2026-11-16.md`](docs/INTEGRACION_MAIN_2026-11-16.md).

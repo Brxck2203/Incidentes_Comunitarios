@@ -121,6 +121,10 @@ export default function ReportDetailPage() {
     {error && <p className="error-message" role="alert">{error}</p>}
     {message && <p className="success-message" role="status">{message}</p>}
     <h2>Evidencias</h2><Evidence audio={report.audio} photos={report.photos || []} />
+    {report.confirmations?.some((confirmation) => confirmation.photos?.length > 0) && <>
+      <h3>Fotografías complementarias de vecinos</h3>
+      <Evidence photos={report.confirmations.flatMap((confirmation) => confirmation.photos || [])} />
+    </>}
     {report.severity && <p>Severidad técnica: <strong>{report.severity}</strong></p>}
     {endorsementCount(report) > 0 && <p>Vecinos que confirmaron: {endorsementCount(report)}</p>}
     {isActiveReport(report) && report.reporterId !== viewerId && !report.confirmations?.some((confirmation) => confirmation.reporterId === viewerId) && (
@@ -191,7 +195,7 @@ export default function ReportDetailPage() {
       {report.references && <p className="preserve-lines">Referencias: {report.references}</p>}
       <h2>Ubicación</h2><LocationMap position={report.position} />
       <p>Latitud: {report.position.lat.toFixed(6)} · Longitud: {report.position.lng.toFixed(6)}</p>
-      <p>Precisión original del dispositivo: {Math.round(report.originalPosition.accuracy)} metros.</p>
+      {Number.isFinite(report.originalPosition?.accuracy) && <p>Precisión original del dispositivo: {Math.round(report.originalPosition.accuracy)} metros.</p>}
       <button type="button" onClick={() => {
         setDraft({
           category: report.category || '',

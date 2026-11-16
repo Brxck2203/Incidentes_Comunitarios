@@ -127,7 +127,7 @@ export async function createReport({ audio, photos, position, capturedAt, report
   const report = {
     ticket, createdAt, capturedAt, updatedAt: createdAt, status: 'Registrado / Recibido',
     audio, photos: normalizedPhotos, position, originalPosition: position, description: '', transcription: '',
-    category, references: '', receptionEvent: 'Nuevo reporte', reporterId, confirmations: [],
+    category, references: '', receptionEvent: 'Nuevo reporte', reporterId, confirmations: [], severity: '',
     history: [{ at: createdAt, action: 'Reporte registrado' }],
   };
   await transaction('readwrite', (store) => store.add(report));
@@ -164,7 +164,7 @@ export function complementReport(ticket, details, photos) {
     request.onsuccess = () => {
       try {
         const current = request.result;
-        if (!current) throw new Error('No se encontró el reporte para ese ticket.');
+        if (!current) throw new Error('El reporte no existe para ese ticket.');
         const at = new Date().toISOString();
         const positionChanged = details.position.lat !== current.position?.lat
           || details.position.lng !== current.position?.lng;
