@@ -147,11 +147,12 @@ audio { width: 100%; min-height: 48px; margin-top: 1rem; }
 .skip-link { position: absolute; left: 1rem; top: -10rem; padding: .75rem; background: white; z-index: 10000; }
 .skip-link:focus { top: 1rem; }
 
-/* HU-10: neighbor confirmation and local resolution notices. */
-.selected-incident, .confirm-section, .confirm-form { margin: 1rem 0; padding: 1rem; border: 1px solid #cbd5e1; border-radius: .65rem; background: #fff; }
-.confirm-form h3 { margin-top: 0; }
-.selected-incident .confirm-form { border: none; padding: 0; }
-.incident-popup button { min-height: 48px; }
-.incident-popup p { overflow-wrap: anywhere; max-width: 240px; }
-.resolution-notices { padding: 1rem; margin: 1rem 0; border: 2px solid #166534; border-radius: .65rem; background: #e2f4e8; }
-.resolution-notices h2 { margin-top: .25rem; }
+/* HU-14: severity labels and priority controls in reception. */
+.severity-panel { display: flex; flex-wrap: wrap; flex-direction: column; align-items: start; gap: .4rem; padding-top: .4rem; }
+.severity-panel label { width: min(100%, 380px); }
+.severity-pill { display: inline-flex; align-items: center; border-radius: 999px; font-size: .9rem; font-weight: 700; padding: .25rem .7rem; border: 1px solid currentColor; }
+.severity-none { background: #e2e8f0; color: #334155; }
+.severity-mild { background: #e6f4e9; color: #14532d; }
+.severity-moderate { background: #fef9c3; color: #713f12; }
+.severity-serious { background: #ffedd5; color: #9a3412; }
+.severity-critical { background: #fee2e2; color: #991b1b; }

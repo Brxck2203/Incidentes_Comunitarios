@@ -76,8 +76,6 @@ export default function HomePage() {
       }
       const position = await getCurrentPosition();
       if (!active.current) return;
-      let reporterId = null;
-      try { reporterId = getCurrentReporterId(); } catch { /* Basic reporting remains available. */ }
       const report = await createReport({
         audio,
         photos: photosToSend,

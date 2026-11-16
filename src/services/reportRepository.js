@@ -1,4 +1,4 @@
-import { isActiveReport } from './reportEndorsements.js';
+import { isActiveReport, severityLevels } from './reportPriority.js';
 
 export const categories = ['Baches', 'Basura clandestina', 'Ramas/arbolado', 'Aceras dañadas'];
 
@@ -112,40 +112,18 @@ export function complementReport(ticket, details, photos) {
   });
 }
 
-// HU-10: atomic, one-per-browser confirmation with evidence and resolution subscription.
-export function confirmIncident(ticket, uploadedPhotos, reporterId) {
-  const photos = validatePhotos(uploadedPhotos);
-  if (!reporterId) throw new Error('No se pudo identificar este navegador.');
+export function setReportSeverity(ticket, severity) {
+  if (severity !== '' && !severityLevels.includes(severity)) throw new Error('Selecciona una severidad válida.');
   return transaction('readwrite', (store, done, fail) => {
     const request = store.get(ticket);
     request.onsuccess = () => {
       const current = request.result;
       if (!current) return fail('El reporte solicitado no existe.');
-      if (!isActiveReport(current)) return fail('Este incidente ya no admite confirmaciones.');
-      if (current.reporterId && current.reporterId === reporterId) return fail('No puedes confirmar tu propio reporte.');
-      if ((current.confirmations || []).some((entry) => entry.reporterId === reporterId)) return fail('Ya confirmaste este incidente anteriormente.');
+      if (!isActiveReport(current)) return fail('No se puede cambiar la severidad de un incidente cerrado.');
+      if ((current.severity || '') === severity) { done(current); return; }
       const at = new Date().toISOString();
-      const report = { ...current,
-        confirmations: [...(current.confirmations || []), { reporterId, at, photos }],
-        updatedAt: at, receptionEvent: 'Confirmación ciudadana recibida',
-        history: [...current.history, { at, action: 'Incidente confirmado por otro vecino (suscripción a resolución)' }],
-      };
-      store.put(report); done(report);
-    };
-  });
-}
-
-export function resolveIncident(ticket) {
-  return transaction('readwrite', (store, done, fail) => {
-    const request = store.get(ticket);
-    request.onsuccess = () => {
-      const current = request.result;
-      if (!current) return fail('El reporte solicitado no existe.');
-      if (!isActiveReport(current)) return fail('Este reporte ya está cerrado.');
-      const at = new Date().toISOString();
-      const report = { ...current, status: 'Resuelto', resolvedAt: at, updatedAt: at,
-        receptionEvent: 'Incidente resuelto',
-        history: [...current.history, { at, action: 'Incidente marcado como resuelto' }],
+      const report = { ...current, severity, updatedAt: at, receptionEvent: 'Severidad actualizada',
+        history: [...current.history, { at, action: `Severidad técnica asignada: ${severity || 'Sin clasificar'}` }],
       };
       store.put(report); done(report);
     };
