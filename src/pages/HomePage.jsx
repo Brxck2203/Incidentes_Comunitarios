@@ -37,44 +37,71 @@ function getTimestamp() {
   return new Date().toISOString();
 }
 
+const EMPTY_DRAFT = { mode: null, audio: null, photos: [], capturedAt: null };
+
+function hasEvidence(draft) {
+  return Boolean(draft.audio?.size || draft.photos.length);
+}
+
 export default function HomePage() {
-  const [photos, setPhotos] = useState([]);
+  const [draft, setDraft] = useState(EMPTY_DRAFT);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const capturedAt = useRef(null);
+  const draftRef = useRef(EMPTY_DRAFT);
   const publishing = useRef(false);
   const active = useRef(true);
   const cameraInputRef = useRef(null);
   const navigate = useNavigate();
+
+  function updateDraft(nextDraft) {
+    draftRef.current = nextDraft;
+    setDraft(nextDraft);
+  }
 
   useEffect(() => {
     active.current = true;
     return () => { active.current = false; };
   }, []);
 
-  async function publishReport({ audioBlob, photoList, stopReason = 'send' } = {}) {
+  async function publishReport(options = {}) {
     if (publishing.current || !active.current) return;
     publishing.current = true;
     setBusy(true);
     setError('');
-    const recordTime = capturedAt.current || getTimestamp();
-    const photosToSend = photoList !== undefined ? photoList : photos;
+    const currentDraft = draftRef.current;
+    const snapshot = {
+      ...currentDraft,
+      audio: currentDraft.audio,
+      photos: [...currentDraft.photos],
+      capturedAt: currentDraft.capturedAt || getTimestamp(),
+    };
+    if (!currentDraft.capturedAt) updateDraft(snapshot);
+    const hasAudioOverride = Object.prototype.hasOwnProperty.call(options, 'audioBlob');
     try {
-      const audio = audioBlob !== undefined
-        ? audioBlob
-        : (voice.recording ? await voice.stop(stopReason) : voice.audio);
+      let audio = hasAudioOverride ? options.audioBlob : snapshot.audio;
+      if (snapshot.mode === 'voice' && !hasAudioOverride && voice.recording) {
+        audio = await voice.stop(options.stopReason || 'send');
+      }
       if (!active.current) return;
-      if (!audio?.size && !photosToSend.length) {
-        setError('La grabación no generó audio. Vuelve a grabar antes de publicar.');
+      if (snapshot.mode === 'voice' && audio?.size) {
+        snapshot.audio = audio;
+        if (draftRef.current.mode === 'voice' && draftRef.current.capturedAt === snapshot.capturedAt) {
+          updateDraft({ ...draftRef.current, audio });
+        }
+      }
+      if (!audio?.size && !snapshot.photos.length) {
+        setError(snapshot.mode === 'voice'
+          ? 'La grabación no generó audio. Vuelve a grabar antes de publicar.'
+          : 'Selecciona una fotografía o graba una nota de voz antes de publicar.');
         return;
       }
       const position = await getCurrentPosition();
       if (!active.current) return;
       const report = await createReport({
         audio,
-        photos: photosToSend,
+        photos: snapshot.photos,
         position,
-        capturedAt: recordTime,
+        capturedAt: snapshot.capturedAt,
       });
       if (!active.current) return;
       navigate(`/reportes/${report.ticket}`, { state: { created: true } });
@@ -91,26 +118,32 @@ export default function HomePage() {
   });
 
   async function handleCameraCapture(event) {
-    if (!active.current) return;
-    setError('');
-    const files = event.target.files;
-    if (!files || files.length === 0) return;
+    const input = event.currentTarget;
     try {
+      if (!active.current || publishing.current) return;
+      const files = input.files;
+      if (!files?.length) return;
+      if (voice.recording || voice.starting) {
+        setError('Detén la grabación antes de seleccionar una fotografía.');
+        return;
+      }
       const selected = validatePhotos(files);
       if (selected.length) {
-        setPhotos(selected);
-        capturedAt.current = getTimestamp();
-        await publishReport({ photoList: selected });
+        if (hasEvidence(draftRef.current)
+          && !window.confirm('Hay una evidencia pendiente. ¿Deseas reemplazarla por esta fotografía?')) return;
+        updateDraft({ mode: 'photo', audio: null, photos: selected, capturedAt: getTimestamp() });
+        setError('');
+        await publishReport();
       }
     } catch (failure) {
       if (active.current) setError(failure.message);
     } finally {
-      event.target.value = '';
+      input.value = '';
     }
   }
 
   function openCamera() {
-    if (publishing.current || busy || voice.starting) return;
+    if (!active.current || publishing.current || busy || voice.starting || voice.recording) return;
     cameraInputRef.current?.click();
   }
 
@@ -119,16 +152,23 @@ export default function HomePage() {
     if (voice.recording) {
       await publishReport({ stopReason: 'send' });
     } else {
-      capturedAt.current = getTimestamp();
+      if (hasEvidence(draftRef.current)
+        && !window.confirm('Hay una evidencia pendiente. ¿Deseas reemplazarla por una nueva nota de voz?')) return;
+      updateDraft({ mode: 'voice', audio: null, photos: [], capturedAt: getTimestamp() });
       setError('');
       await voice.start();
     }
   }
 
-  function stopForReview() {
-    void voice.stop('review').catch((failure) => {
+  async function stopForReview() {
+    try {
+      const audio = await voice.stop('review');
+      if (audio?.size && draftRef.current.mode === 'voice' && !publishing.current) {
+        updateDraft({ ...draftRef.current, audio });
+      }
+    } catch (failure) {
       if (active.current) setError(failure.message);
-    });
+    }
   }
 
   return (
@@ -184,6 +224,7 @@ export default function HomePage() {
           accept="image/jpeg,image/png,image/webp,image/avif"
           capture="environment"
           style={{ display: 'none' }}
+          disabled={busy || voice.starting || voice.recording}
           onChange={(event) => { void handleCameraCapture(event); }}
           tabIndex={-1}
           aria-hidden="true"
@@ -193,7 +234,7 @@ export default function HomePage() {
       {busy && (
         <div className="sending-indicator" role="status" aria-live="polite">
           <span className="spinner" aria-hidden="true" />
-          <span>Obteniendo ubicación y enviando reporte…</span>
+          <span>Obteniendo ubicación y guardando el reporte local…</span>
         </div>
       )}
 
@@ -213,7 +254,7 @@ export default function HomePage() {
             <button
               type="button"
               className="secondary"
-              onClick={stopForReview}
+              onClick={() => { void stopForReview(); }}
               disabled={busy}
             >
               Detener y escuchar primero
@@ -222,20 +263,23 @@ export default function HomePage() {
         </div>
       )}
 
-      <Evidence audio={voice.audio} photos={photos} />
+      <Evidence
+        audio={draft.mode === 'voice' ? draft.audio : null}
+        photos={draft.mode === 'photo' ? draft.photos : []}
+      />
 
       {(error || voice.error) && <p className="error-message" role="alert">{error || voice.error}</p>}
 
       <button
         className="publish-button"
         type="button"
-        disabled={busy || voice.starting || (!voice.recording && !voice.audio && !photos.length)}
+        disabled={busy || voice.starting || (!voice.recording && !draft.audio?.size && !draft.photos.length)}
         onClick={() => { void publishReport(); }}
       >
         {busy ? 'Obteniendo ubicación y guardando…' : 'Publicar reporte'}
       </button>
 
-      <p>Se asociarán la ubicación de tu dispositivo y la fecha del reporte.</p>
+      <p>Se asociarán la ubicación del dispositivo al publicar y la fecha de incorporación de la evidencia.</p>
       <Link className="text-link" to="/reportes">Consultar mis reportes</Link>
     </section>
   );

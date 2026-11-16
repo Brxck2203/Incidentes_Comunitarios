@@ -1,3 +1,5 @@
+import { notifyReportCreated } from './reportNotifications.js';
+
 export const categories = ['Baches', 'Basura clandestina', 'Ramas/arbolado', 'Aceras dañadas'];
 
 function openDatabase() {
@@ -49,24 +51,30 @@ export function validatePhotos(files) {
   const photos = Array.from(files ?? []);
   if (photos.length > 8) throw new Error('Selecciona un máximo de ocho fotografías por carga.');
   for (const photo of photos) {
-    if (!['image/jpeg', 'image/png', 'image/webp', 'image/avif'].includes(photo.type)) throw new Error('Utiliza fotografías JPG, PNG, WebP o AVIF.');
-    if (!photo.size || photo.size > 10 * 1024 * 1024) throw new Error('Cada fotografía debe ocupar entre 1 byte y 10 MB.');
+    if (!photo || !['image/jpeg', 'image/png', 'image/webp', 'image/avif'].includes(photo.type)) {
+      throw new Error('Utiliza fotografías JPG, PNG, WebP o AVIF.');
+    }
+    if (!Number.isFinite(photo.size) || photo.size <= 0 || photo.size > 10 * 1024 * 1024) {
+      throw new Error('Cada fotografía debe ocupar entre 1 byte y 10 MB.');
+    }
   }
   return photos;
 }
 
-export async function createReport({ audio, photos, position, capturedAt }) {
+export async function createReport({ audio, photos, position, capturedAt } = {}) {
+  const normalizedPhotos = validatePhotos(photos);
+  if (!audio?.size && !normalizedPhotos.length) throw new Error('Graba una nota de voz o adjunta una fotografía.');
   validatePosition(position);
-  if (!audio?.size && !photos.length) throw new Error('Graba una nota de voz o adjunta una fotografía.');
   const createdAt = new Date().toISOString();
   const ticket = `RC-${crypto.randomUUID()}`;
   const report = {
     ticket, createdAt, capturedAt, updatedAt: createdAt, status: 'Registrado / Recibido',
-    audio, photos, position, originalPosition: position, description: '', transcription: '',
+    audio, photos: normalizedPhotos, position, originalPosition: position, description: '', transcription: '',
     category: '', references: '', receptionEvent: 'Nuevo reporte',
     history: [{ at: createdAt, action: 'Reporte registrado' }],
   };
   await transaction('readwrite', (store) => store.add(report));
+  notifyReportCreated();
   return report;
 }
 
