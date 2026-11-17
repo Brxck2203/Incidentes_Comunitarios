@@ -337,6 +337,15 @@ audio { width: 100%; min-height: 48px; margin-top: 1rem; }
 .decision-btn-admit { background: #14532d; border-color: #14532d; color: #fff; }
 .decision-btn-dismiss { background: #fff; border-color: #991b1b; color: #991b1b; }
 
+/* Fase 7 [PROPUESTA]: controles de evidencia combinada, contador de fotos y quitar elemento */
+.evidence-audio-item { display: flex; flex-direction: column; gap: .5rem; margin-bottom: .75rem; }
+.evidence-photo-item { display: flex; flex-direction: column; gap: .4rem; }
+.remove-evidence-button { width: 100%; min-height: 48px; padding: .45rem .75rem; font-size: .9rem; }
+.evidence-photos-counter { margin: .5rem 0 .25rem; font-weight: 700; color: #123f73; }
+.confirmation-evidence-summary { margin: .5rem 0; color: #14532d; }
+.report-card-evidence-indicator { margin: .25rem 0; font-size: .92rem; font-weight: 600; color: #334155; }
+.report-card-modified-notice { margin: .35rem 0; padding: .35rem .65rem; background: #fef3c7; border-left: 3px solid #b45309; color: #7c2d12; font-size: .9rem; font-weight: 650; border-radius: .3rem; }
+
 @media (max-width: 640px) {
   .capture-actions { grid-template-columns: 1fr; }
   .recording-status-actions, .actions, .consolidation-toolbar-actions, .municipal-decision-actions {

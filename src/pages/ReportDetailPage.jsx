@@ -14,7 +14,12 @@ import Evidence from '../components/Evidence.jsx';
 import LocationMap from '../components/LocationMap.jsx';
 import MunicipalDecisionPanel from '../components/MunicipalDecisionPanel.jsx';
 import { subscribeToReportChanges } from '../services/reportNotifications.js';
-import { getCitizenStatusInfo, uiCopy } from '../constants/uiCopy.js';
+import {
+  formatEvidenceSummary,
+  getCitizenStatusInfo,
+  isCombinedEvidenceEnabled,
+  uiCopy,
+} from '../constants/uiCopy.js';
 import { triggerUxFeedback } from '../services/uxFeedback.js';
 
 function formatDateTime(value) {
@@ -236,6 +241,11 @@ export default function ReportDetailPage() {
       <section className="confirmation-banner" role="status" aria-live="polite">
         <h2>{uiCopy.confirmation.title}</h2>
         <p>{uiCopy.confirmation.subtitle}</p>
+        {isCombinedEvidenceEnabled() && formatEvidenceSummary(report, { confirmationStyle: true }) && (
+          <p className="confirmation-evidence-summary">
+            <strong>{formatEvidenceSummary(report, { confirmationStyle: true })}</strong>
+          </p>
+        )}
         <div className="tracking-highlight-box">
           <span className="tracking-highlight-label">{uiCopy.common.trackingNumberFirstMention}</span>
           <strong className="tracking-highlight-code">{report.ticket}</strong>

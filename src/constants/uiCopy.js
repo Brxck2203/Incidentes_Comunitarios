@@ -8,8 +8,56 @@
 
 export const DEFAULT_TONE = 'usted';
 
-// Bandera para habilitar o retirar fácilmente la sección "Reportes que sigo" (punto pendiente #8).
+// Bandera para habilitar o retirar fácilmente la sección "Reportes que sigo" (punto pendiente #14 en v3).
 export const ENABLE_FOLLOWED_REPORTS_SECTION = true;
+
+// [PROPUESTA - Fase 7]: Interruptor de configuración para el flujo combinado de voz y fotos.
+// Desactivado por defecto (false) hasta contar con aprobación del Product Owner.
+export const COMBINED_EVIDENCE_ENABLED = false;
+
+// Valores por defecto sugeridos como constantes configurables ([DECISIÓN PENDIENTE] en sección 12 de v3).
+export const DEFAULT_MAX_PHOTOS_PER_REPORT = 5;
+export const DEFAULT_MAX_VOICE_SECONDS = 60;
+
+let combinedEvidenceOverride = null;
+
+export function setCombinedEvidenceEnabledForTest(value) {
+  combinedEvidenceOverride = typeof value === 'boolean' ? value : null;
+}
+
+export function isCombinedEvidenceEnabled() {
+  if (typeof combinedEvidenceOverride === 'boolean') return combinedEvidenceOverride;
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = window.localStorage?.getItem('ux-combined-evidence');
+      if (stored === 'true') return true;
+      if (stored === 'false') return false;
+    } catch {
+      // Ignorar restricciones de localStorage
+    }
+  }
+  return COMBINED_EVIDENCE_ENABLED;
+}
+
+export function formatEvidenceSummary(reportOrDraft, { confirmationStyle = false } = {}) {
+  const hasAudio = Boolean(reportOrDraft?.audio?.size);
+  const photoCount = Array.isArray(reportOrDraft?.photos) ? reportOrDraft.photos.length : 0;
+  const parts = [];
+  if (hasAudio) {
+    parts.push('1 nota de voz');
+  }
+  if (photoCount > 0) {
+    parts.push(`${photoCount} ${photoCount === 1 ? 'foto' : 'fotos'}`);
+  }
+  if (!parts.length) return '';
+  if (confirmationStyle) {
+    return `Recibimos ${parts.join(' y ')}.`;
+  }
+  const shortParts = [];
+  if (hasAudio) shortParts.push('1 audio');
+  if (photoCount > 0) shortParts.push(`${photoCount} ${photoCount === 1 ? 'foto' : 'fotos'}`);
+  return `Evidencia: ${shortParts.join(' · ')}`;
+}
 
 const COPY_BY_TONE = {
   usted: {
@@ -64,8 +112,17 @@ const COPY_BY_TONE = {
       recordingStatusHint: 'Su voz se está grabando. Presione «Publicar reporte» para enviarlo de inmediato.',
       recordingTimeoutNotice: 'La grabación alcanzó el límite de 60 segundos y se está publicando su reporte.',
       stopAndListenAction: 'Detener y escuchar primero',
+      stopRecordingAction: 'Detener',
       discardRecordingAction: 'Descartar y volver a grabar',
       discardedRecordingNotice: 'Grabación descartada. Puede grabar una nueva nota de voz cuando guste.',
+      combinedLeadExtra: 'También puede usar ambas.',
+      addPhotoSecondaryAction: '+ Agregar foto',
+      addVoiceSecondaryAction: '+ Agregar nota de voz',
+      removeAudioAction: 'Quitar nota de voz',
+      removePhotoAction: (index) => `Quitar foto ${index + 1}`,
+      photosCounterLabel: (current, max) => `${current} de ${max} fotos`,
+      maxPhotosReachedNotice: (max) => `Llegó al máximo de fotos (${max} fotos por reporte).`,
+      partialPhotoError: (fileName, reason) => `No se pudo adjuntar la fotografía «${fileName}» (${reason}). Sus demás evidencias se conservan; puede reintentar solo esa fotografía.`,
       publishingStatus: 'Enviando su reporte y obteniendo ubicación…',
       publishButtonIdle: 'Publicar reporte',
       publishButtonBusy: 'Enviando su reporte…',
@@ -246,7 +303,9 @@ const COPY_BY_TONE = {
     },
     evidence: {
       audioAria: 'Nota de voz original del reporte',
-      photoAlt: (index) => `Fotografía de evidencia ${index + 1} (abre imagen original en pestaña nueva)`,
+      photoAlt: (index, total = 0) => total > 0
+        ? `Foto ${index + 1} de ${total} (abre imagen original en pestaña nueva)`
+        : `Fotografía de evidencia ${index + 1} (abre imagen original en pestaña nueva)`,
       mapAria: 'Mapa de ubicación del incidente',
       mapTileError: 'No se pudo cargar parte del mapa. Revise su conexión; las coordenadas siguen disponibles.',
       mapDragHint: 'Arrastre el marcador para ajustar el punto exacto del incidente.',

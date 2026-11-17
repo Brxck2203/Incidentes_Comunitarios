@@ -4,6 +4,12 @@ import {
   createReport, complementReport, confirmIncident, filterOwnReports, findPotentialDuplicates, getReport,
   getReports, isOwnReport, recordMunicipalDecision, resolveIncident, setReportSeverity, validatePhotos,
 } from '../src/services/reportRepository.js';
+import {
+  COMBINED_EVIDENCE_ENABLED,
+  formatEvidenceSummary,
+  isCombinedEvidenceEnabled,
+  setCombinedEvidenceEnabledForTest,
+} from '../src/constants/uiCopy.js';
 import { priorityInfo, sortReceptionReports } from '../src/services/reportPriority.js';
 import { subscribeToReportChanges } from '../src/services/reportNotifications.js';
 import { mockIndexedDB, original } from './helpers/mockIndexedDB.js';
@@ -183,4 +189,38 @@ test('RF-02: filterOwnReports devuelve únicamente los reportes propios del part
   assert.ok(filteredForA.some((item) => item.ticket === mine.ticket));
   assert.ok(filteredForA.some((item) => item.ticket === original.ticket));
   assert.ok(!filteredForA.some((item) => item.ticket === neighborReport.ticket));
+});
+
+test('Fase 7 [PROPUESTA]: feature flag desactivado por defecto y publicación combinada de voz y fotos en un único ticket cuando se activa', async () => {
+  mockIndexedDB([]);
+  assert.equal(COMBINED_EVIDENCE_ENABLED, false);
+  assert.equal(isCombinedEvidenceEnabled(), false);
+
+  try {
+    setCombinedEvidenceEnabledForTest(true);
+    assert.equal(isCombinedEvidenceEnabled(), true);
+
+    const voiceBlob = new Blob(['audio-data'], { type: 'audio/webm' });
+    const combinedReport = await createReport({
+      reporterId: 'citizen-combined',
+      audio: voiceBlob,
+      photos: [photo(), photo(), photo()],
+      category: 'Ramas/arbolado',
+      position: { lat: 10.3238, lng: -84.4271, accuracy: 10 },
+      capturedAt: new Date().toISOString(),
+    });
+
+    const persisted = await getReport(combinedReport.ticket);
+    assert.ok(persisted.ticket.startsWith('RC-'));
+    assert.equal(persisted.audio.size, voiceBlob.size);
+    assert.equal(persisted.photos.length, 3);
+    assert.equal(
+      formatEvidenceSummary(persisted, { confirmationStyle: true }),
+      'Recibimos 1 nota de voz y 3 fotos.',
+    );
+    assert.equal(formatEvidenceSummary(persisted), 'Evidencia: 1 audio · 3 fotos');
+  } finally {
+    setCombinedEvidenceEnabledForTest(null);
+  }
+  assert.equal(isCombinedEvidenceEnabled(), false);
 });

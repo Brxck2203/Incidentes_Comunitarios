@@ -14,7 +14,13 @@ import IncidentMap from '../components/IncidentMap.jsx';
 import MunicipalIncidentMap from '../components/MunicipalIncidentMap.jsx';
 import MunicipalConsoleFilters from '../components/MunicipalConsoleFilters.jsx';
 import { subscribeToReportChanges } from '../services/reportNotifications.js';
-import { ENABLE_FOLLOWED_REPORTS_SECTION, getCitizenStatusInfo, uiCopy } from '../constants/uiCopy.js';
+import {
+  ENABLE_FOLLOWED_REPORTS_SECTION,
+  formatEvidenceSummary,
+  getCitizenStatusInfo,
+  isCombinedEvidenceEnabled,
+  uiCopy,
+} from '../constants/uiCopy.js';
 
 const severityStyle = { Leve: 'mild', Moderado: 'moderate', Grave: 'serious', Crítico: 'critical' };
 const severityIcons = { Leve: '●', Moderado: '▲', Grave: '◆', Crítico: '■' };
@@ -256,6 +262,14 @@ export default function ReportsPage({ reception = false }) {
           {uiCopy.jointAttention.citizenLead} (Estado: <strong>{tracking.effectiveStatus}</strong>)
         </p>}
       <p className="report-card-date">{formatDateTime(report.createdAt)}</p>
+      {isCombinedEvidenceEnabled() && formatEvidenceSummary(report) && (
+        <p className="report-card-evidence-indicator">{formatEvidenceSummary(report)}</p>
+      )}
+      {reception && report.receptionEvent === 'Información complementada' && (
+        <p className="report-card-modified-notice" role="status">
+          Modificado por el ciudadano · {formatDateTime(report.updatedAt)}
+        </p>
+      )}
       {endorsementCount(report) > 0 && <p>Vecinos que respaldan el reporte: <strong>{endorsementCount(report)}</strong></p>}
       <div className="report-card-footer-actions">
         <Link className="text-link" to={detailUrl}>

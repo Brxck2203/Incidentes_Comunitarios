@@ -5,7 +5,11 @@ import { categories, createReport, findPotentialDuplicates, getCurrentReporterId
 import DuplicateWarning from '../components/DuplicateWarning.jsx';
 import { getCurrentPosition } from '../services/geolocation.js';
 import Evidence from '../components/Evidence.jsx';
-import { uiCopy } from '../constants/uiCopy.js';
+import {
+  DEFAULT_MAX_PHOTOS_PER_REPORT,
+  isCombinedEvidenceEnabled,
+  uiCopy,
+} from '../constants/uiCopy.js';
 import { triggerUxFeedback } from '../services/uxFeedback.js';
 
 function MicrophoneIcon() {
@@ -47,6 +51,7 @@ function hasEvidence(draft) {
 }
 
 export default function HomePage() {
+  const combinedEnabled = isCombinedEvidenceEnabled();
   const [draft, setDraft] = useState(EMPTY_DRAFT);
   const [category, setCategory] = useState('');
   const [pendingReport, setPendingReport] = useState(null);
@@ -101,13 +106,13 @@ export default function HomePage() {
     const hasAudioOverride = Object.prototype.hasOwnProperty.call(options, 'audioBlob');
     try {
       let audio = hasAudioOverride ? options.audioBlob : snapshot.audio;
-      if (snapshot.mode === 'voice' && !hasAudioOverride && voice.recording) {
+      if (!hasAudioOverride && voice.recording) {
         audio = await voice.stop(options.stopReason || 'send');
       }
       if (!active.current) return;
-      if (snapshot.mode === 'voice' && audio?.size) {
+      if (audio?.size) {
         snapshot.audio = audio;
-        if (draftRef.current.mode === 'voice' && draftRef.current.capturedAt === snapshot.capturedAt) {
+        if (draftRef.current.capturedAt === snapshot.capturedAt) {
           updateDraft({ ...draftRef.current, audio });
         }
       }
@@ -156,6 +161,58 @@ export default function HomePage() {
         setError(uiCopy.home.stopBeforePhotoError);
         return;
       }
+      if (combinedEnabled) {
+        const currentPhotos = draftRef.current.photos || [];
+        const remainingSlots = DEFAULT_MAX_PHOTOS_PER_REPORT - currentPhotos.length;
+        if (remainingSlots <= 0) {
+          setStatusNotice(uiCopy.home.maxPhotosReachedNotice(DEFAULT_MAX_PHOTOS_PER_REPORT));
+          return;
+        }
+        const incoming = Array.from(files).slice(0, remainingSlots);
+        const validNewPhotos = [];
+        let firstFailure = null;
+        for (const candidate of incoming) {
+          try {
+            const checked = validatePhotos([candidate]);
+            validNewPhotos.push(...checked);
+          } catch (fileError) {
+            if (!firstFailure) {
+              firstFailure = {
+                name: candidate?.name || 'archivo',
+                reason: fileError.message,
+              };
+            }
+          }
+        }
+        if (validNewPhotos.length > 0) {
+          const nextPhotos = [...currentPhotos, ...validNewPhotos];
+          const hadPriorEvidence = hasEvidence(draftRef.current);
+          updateDraft({
+            mode: draftRef.current.audio?.size ? 'combined' : 'photo',
+            audio: draftRef.current.audio,
+            photos: nextPhotos,
+            capturedAt: draftRef.current.capturedAt || getTimestamp(),
+          });
+          setStatusNotice(
+            nextPhotos.length >= DEFAULT_MAX_PHOTOS_PER_REPORT
+              ? uiCopy.home.maxPhotosReachedNotice(DEFAULT_MAX_PHOTOS_PER_REPORT)
+              : '',
+          );
+          if (firstFailure) {
+            setError(uiCopy.home.partialPhotoError(firstFailure.name, firstFailure.reason));
+            return;
+          }
+          setError('');
+          // Si era la primera foto sola y no había otra evidencia previa, conserva el flujo rápido de 2 toques
+          if (!hadPriorEvidence && nextPhotos.length === 1) {
+            await publishReport();
+          }
+        } else if (firstFailure) {
+          setError(uiCopy.home.partialPhotoError(firstFailure.name, firstFailure.reason));
+        }
+        return;
+      }
+
       const selected = validatePhotos(files);
       if (selected.length) {
         if (hasEvidence(draftRef.current)
@@ -174,6 +231,10 @@ export default function HomePage() {
 
   function openCamera() {
     if (!active.current || publishing.current || busy || voice.starting || voice.recording || pendingReport) return;
+    if (combinedEnabled && draftRef.current.photos.length >= DEFAULT_MAX_PHOTOS_PER_REPORT) {
+      setStatusNotice(uiCopy.home.maxPhotosReachedNotice(DEFAULT_MAX_PHOTOS_PER_REPORT));
+      return;
+    }
     cameraInputRef.current?.click();
   }
 
@@ -182,9 +243,19 @@ export default function HomePage() {
     if (voice.recording) {
       await publishReport({ stopReason: 'send' });
     } else {
-      if (hasEvidence(draftRef.current)
-        && !window.confirm(uiCopy.home.replaceAudioConfirm)) return;
-      updateDraft({ mode: 'voice', audio: null, photos: [], capturedAt: getTimestamp() });
+      if (combinedEnabled) {
+        if (draftRef.current.audio?.size && !window.confirm(uiCopy.home.replaceAudioConfirm)) return;
+        updateDraft({
+          mode: draftRef.current.photos.length ? 'combined' : 'voice',
+          audio: null,
+          photos: [...draftRef.current.photos],
+          capturedAt: draftRef.current.capturedAt || getTimestamp(),
+        });
+      } else {
+        if (hasEvidence(draftRef.current)
+          && !window.confirm(uiCopy.home.replaceAudioConfirm)) return;
+        updateDraft({ mode: 'voice', audio: null, photos: [], capturedAt: getTimestamp() });
+      }
       setError('');
       setStatusNotice('');
       triggerUxFeedback('record');
@@ -195,12 +266,37 @@ export default function HomePage() {
   async function stopForReview() {
     try {
       const audio = await voice.stop('review');
-      if (audio?.size && draftRef.current.mode === 'voice' && !publishing.current) {
-        updateDraft({ ...draftRef.current, audio });
+      if (audio?.size && !publishing.current) {
+        updateDraft({
+          ...draftRef.current,
+          mode: draftRef.current.photos.length ? 'combined' : 'voice',
+          audio,
+        });
       }
     } catch (failure) {
       if (active.current) setError(failure.message);
     }
+  }
+
+  function removeDraftAudio() {
+    if (busy || publishing.current) return;
+    voice.discard();
+    updateDraft({
+      ...draftRef.current,
+      mode: draftRef.current.photos.length ? 'photo' : null,
+      audio: null,
+    });
+  }
+
+  function removeDraftPhoto(indexToRemove) {
+    if (busy || publishing.current) return;
+    const nextPhotos = draftRef.current.photos.filter((_, index) => index !== indexToRemove);
+    updateDraft({
+      ...draftRef.current,
+      mode: draftRef.current.audio?.size ? 'voice' : (nextPhotos.length ? 'photo' : null),
+      photos: nextPhotos,
+    });
+    setStatusNotice('');
   }
 
   function discardAndRestartRecording() {
@@ -218,7 +314,10 @@ export default function HomePage() {
     <section aria-labelledby="capture-title">
       <p className="eyebrow">{uiCopy.home.eyebrow}</p>
       <h1 id="capture-title">{uiCopy.home.title}</h1>
-      <p className="lead">{uiCopy.home.lead}</p>
+      <p className="lead">
+        {uiCopy.home.lead}
+        {combinedEnabled ? ` ${uiCopy.home.combinedLeadExtra}` : ''}
+      </p>
       <p className="permission-context-note">{uiCopy.home.permissionContext}</p>
 
       <div className="capture-actions">
@@ -313,7 +412,7 @@ export default function HomePage() {
               onClick={stopForReview}
               disabled={busy}
             >
-              {uiCopy.home.stopAndListenAction}
+              {combinedEnabled ? uiCopy.home.stopRecordingAction : uiCopy.home.stopAndListenAction}
             </button>
             <button
               type="button"
@@ -332,11 +431,41 @@ export default function HomePage() {
       )}
 
       <Evidence
-        audio={draft.mode === 'voice' ? draft.audio : null}
-        photos={draft.mode === 'photo' ? draft.photos : []}
+        audio={combinedEnabled ? draft.audio : (draft.mode === 'voice' ? draft.audio : null)}
+        photos={combinedEnabled ? draft.photos : (draft.mode === 'photo' ? draft.photos : [])}
+        onRemoveAudio={combinedEnabled && draft.audio?.size ? removeDraftAudio : undefined}
+        onRemovePhoto={combinedEnabled && draft.photos.length ? removeDraftPhoto : undefined}
+        counterLabel={combinedEnabled && draft.photos.length > 0
+          ? uiCopy.home.photosCounterLabel(draft.photos.length, DEFAULT_MAX_PHOTOS_PER_REPORT)
+          : ''}
       />
 
-      {!voice.recording && draft.mode === 'voice' && Boolean(draft.audio?.size) && (
+      {combinedEnabled && !voice.recording && hasEvidence(draft) && (
+        <div className="draft-secondary-actions" role="group" aria-label="Sumar evidencia adicional">
+          {draft.photos.length < DEFAULT_MAX_PHOTOS_PER_REPORT && (
+            <button
+              type="button"
+              className="secondary"
+              disabled={busy || voice.starting}
+              onClick={openCamera}
+            >
+              {uiCopy.home.addPhotoSecondaryAction}
+            </button>
+          )}
+          {!draft.audio?.size && (
+            <button
+              type="button"
+              className="secondary"
+              disabled={busy || voice.starting}
+              onClick={() => { void handleMicClick(); }}
+            >
+              {uiCopy.home.addVoiceSecondaryAction}
+            </button>
+          )}
+        </div>
+      )}
+
+      {!combinedEnabled && !voice.recording && draft.mode === 'voice' && Boolean(draft.audio?.size) && (
         <div className="draft-secondary-actions">
           <button
             type="button"
@@ -349,7 +478,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {!voice.recording && draft.mode === 'photo' && draft.photos.length > 0 && (
+      {!combinedEnabled && !voice.recording && draft.mode === 'photo' && draft.photos.length > 0 && (
         <div className="draft-secondary-actions">
           <button
             type="button"
