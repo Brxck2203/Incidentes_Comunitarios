@@ -13,7 +13,7 @@ export const ENABLE_FOLLOWED_REPORTS_SECTION = true;
 
 // [PROPUESTA - Fase 7]: Interruptor de configuración para el flujo combinado de voz y fotos.
 // Desactivado por defecto (false) hasta contar con aprobación del Product Owner.
-export const COMBINED_EVIDENCE_ENABLED = false;
+export const COMBINED_EVIDENCE_ENABLED = true;
 
 // Valores por defecto sugeridos como constantes configurables ([DECISIÓN PENDIENTE] en sección 12 de v3).
 export const DEFAULT_MAX_PHOTOS_PER_REPORT = 5;
