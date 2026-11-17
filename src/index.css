@@ -1,18 +1,19 @@
-:root { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #152b3c; background: #f3f6fa; font-synthesis: none; text-rendering: optimizeLegibility; line-height: 1.6; }
+:root { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 100%; color: #152b3c; background: #f3f6fa; font-synthesis: none; text-rendering: optimizeLegibility; line-height: 1.6; }
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 320px; }
+html, body { margin: 0; min-width: 320px; max-width: 100%; overflow-x: hidden; }
 a { color: #123f73; }
 button, input, select, textarea { font: inherit; }
-button, .button-link { display: inline-flex; align-items: center; justify-content: center; min-width: 48px; min-height: 48px; padding: .8rem 1.25rem; border: 2px solid transparent; border-radius: .65rem; background: #123f73; color: white; cursor: pointer; text-decoration: none; font-weight: 700; }
+button, .button-link { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; min-width: 48px; min-height: 48px; padding: .8rem 1.25rem; border: 2px solid transparent; border-radius: .65rem; background: #123f73; color: white; cursor: pointer; text-decoration: none; font-weight: 700; }
 button:disabled { cursor: not-allowed; opacity: .65; }
 .secondary { background: white; border-color: #123f73; color: #123f73; }
 :focus-visible { outline: 3px solid #9b4600; outline-offset: 4px; }
-h1, h2 { line-height: 1.2; }
-h1 { font-size: clamp(2rem, 5vw, 3rem); }
-h2 { margin-top: 2rem; font-size: 1.35rem; }
+h1, h2, h3 { line-height: 1.25; }
+h1 { font-size: clamp(1.75rem, 4.5vw, 2.5rem); margin-top: .25rem; }
+h2 { margin-top: 1.75rem; font-size: 1.35rem; }
 label { display: grid; gap: .4rem; margin: 1rem 0; font-weight: 650; }
-input, select, textarea { width: 100%; min-height: 48px; border: 1px solid #64748b; border-radius: .5rem; padding: .75rem; background: white; color: #152b3c; }
+input, select, textarea { width: 100%; min-height: 48px; border: 1px solid #475569; border-radius: .5rem; padding: .75rem; background: white; color: #152b3c; }
 textarea { min-height: 110px; resize: vertical; }
-.error-message { padding: 1rem; background: #fff0ee; color: #8a1b12; border-left: 4px solid #8a1b12; }
-.success-message { padding: 1rem; background: #e2f4e8; color: #14552c; }
+.error-message { padding: 1rem; background: #fff0ee; color: #8a1b12; border-left: 4px solid #8a1b12; border-radius: .4rem; }
+.success-message { padding: 1rem; background: #e2f4e8; color: #14552c; border-left: 4px solid #14552c; border-radius: .4rem; }
+.info-message { padding: .85rem 1rem; background: #e0f2fe; color: #0c4a6e; border-left: 4px solid #0284c7; border-radius: .4rem; }
 .error-screen { max-width: 720px; margin: 4rem auto; padding: 1.5rem; }
