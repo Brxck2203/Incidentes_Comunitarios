@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getCurrentReporterId, getReports, resolveIncident, setReportSeverity } from '../services/reportRepository.js';
+import { filterOwnReports, getCurrentReporterId, getReports, resolveIncident, setReportSeverity } from '../services/reportRepository.js';
 import { resolveReportsListTracking } from '../services/consolidatedTracking.js';
 import { endorsementCount, isActiveReport, priorityInfo, severityLevels, sortReceptionReports } from '../services/reportPriority.js';
 import { filterMunicipalReports, municipalStatusLabel } from '../services/municipalConsole.js';
@@ -121,12 +121,16 @@ export default function ReportsPage({ reception = false }) {
     }
   }
 
+  const ownReports = useMemo(
+    () => (reception ? reports : filterOwnReports(reports, reporterId)),
+    [reception, reports, reporterId],
+  );
   const orderedReports = useMemo(() => reception ? sortReceptionReports(reports.map((report) => {
     const tracking = trackingMap[report.ticket];
     return tracking?.isConsolidatedSecondary && !tracking.masterUnavailable
       ? { ...report, status: tracking.effectiveStatus }
       : report;
-  })) : reports, [reception, reports, trackingMap]);
+  })) : ownReports, [reception, reports, ownReports, trackingMap]);
   const statuses = useMemo(() => [...new Set(reports.map((report) =>
     municipalStatusLabel(report, trackingMap)).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
   [reports, trackingMap]);

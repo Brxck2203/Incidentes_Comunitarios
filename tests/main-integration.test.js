@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createReport, complementReport, confirmIncident, findPotentialDuplicates, getReport,
-  getReports, recordMunicipalDecision, resolveIncident, setReportSeverity, validatePhotos,
+  createReport, complementReport, confirmIncident, filterOwnReports, findPotentialDuplicates, getReport,
+  getReports, isOwnReport, recordMunicipalDecision, resolveIncident, setReportSeverity, validatePhotos,
 } from '../src/services/reportRepository.js';
 import { priorityInfo, sortReceptionReports } from '../src/services/reportPriority.js';
 import { subscribeToReportChanges } from '../src/services/reportNotifications.js';
@@ -162,4 +162,25 @@ test('Integración: una confirmación de un ticket secundario consulta el estado
   mockIndexedDB([orphanSecondary]);
   await assert.rejects(() => confirmIncident(orphanSecondary.ticket, [], 'neighbor'), /maestro no está disponible/i);
   assert.equal((await getReport(orphanSecondary.ticket)).confirmations?.length ?? 0, 0);
+});
+
+test('RF-02: filterOwnReports devuelve únicamente los reportes propios del participante y registros v1 sin reporterId', async () => {
+  mockIndexedDB([original]);
+  const mine = await createReport({
+    reporterId: 'citizen-A', audio: null, photos: [photo()], category: 'Baches',
+    position: { lat: 10.001, lng: -84 }, capturedAt: new Date().toISOString(),
+  });
+  const neighborReport = await createReport({
+    reporterId: 'citizen-B', audio: null, photos: [photo()], category: 'Aceras dañadas',
+    position: { lat: 10.002, lng: -84 }, capturedAt: new Date().toISOString(),
+  });
+  const all = await getReports();
+  const filteredForA = filterOwnReports(all, 'citizen-A');
+
+  assert.equal(isOwnReport(mine, 'citizen-A'), true);
+  assert.equal(isOwnReport(neighborReport, 'citizen-A'), false);
+  assert.equal(isOwnReport(original, 'citizen-A'), true);
+  assert.ok(filteredForA.some((item) => item.ticket === mine.ticket));
+  assert.ok(filteredForA.some((item) => item.ticket === original.ticket));
+  assert.ok(!filteredForA.some((item) => item.ticket === neighborReport.ticket));
 });

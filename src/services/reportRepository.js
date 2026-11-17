@@ -118,6 +118,25 @@ export function getCurrentReporterId() {
   }
 }
 
+/**
+ * RF-02: determina si un reporte pertenece a la persona que consulta en este navegador.
+ * Los registros heredados de v1 sin reporterId se consideran propios del navegador local.
+ */
+export function isOwnReport(report, reporterId) {
+  if (!report || typeof report !== 'object') return false;
+  if (!report.reporterId) return true;
+  if (!reporterId) return false;
+  return report.reporterId === reporterId;
+}
+
+/**
+ * RF-02: filtra únicamente los reportes propios para la sección "Mis reportes".
+ */
+export function filterOwnReports(reports = [], reporterId = null) {
+  const list = Array.isArray(reports) ? reports : [];
+  return list.filter((report) => isOwnReport(report, reporterId));
+}
+
 export async function createReport({ audio, photos, position, capturedAt, reporterId = null, category = '' } = {}) {
   const normalizedPhotos = validatePhotos(photos);
   if (!audio?.size && !normalizedPhotos.length) throw new Error('Graba una nota de voz o adjunta una fotografía.');
