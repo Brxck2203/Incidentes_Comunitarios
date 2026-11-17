@@ -1,118 +1,204 @@
-# Puntos Pendientes de Definición de UX y Requerimientos
+# Puntos Pendientes de Definición de UX y Requerimientos (v3)
 
-Este documento registra los puntos identificados en la **Sección 11** de `docs/ux/Recomendaciones_UX_Reporte_Ciudadano_v2.md` que requieren aclaración formal del equipo o validación con el Product Owner antes de modificar reglas de interacción o contratos de negocio.
+Este documento registra los puntos de la **Sección 12** de `docs/ux/Recomendaciones_UX_Reporte_Ciudadano_v3.md` que están marcados como **[PROPUESTA – requiere aprobación]** o **[DECISIÓN PENDIENTE]**. Ninguno de ellos se ha dado por cerrado de forma unilateral: se describe qué hace hoy el código, dónde se ubica, qué opciones tiene el equipo y cuál es el valor configurable sugerido.
 
 ---
 
-## 1. Conteo de los dos toques (RNF-01)
+## 1. Aprobación del flujo combinado de voz y fotografías (RF-01 y RNF-01)
 
+* **Estado:** `[PROPUESTA – requiere aprobación del Product Owner]`
 * **Ubicación en el código:**
-  * `src/pages/HomePage.jsx` (líneas 155–200: `handleCameraCapture`, `openCamera`, `handleMicClick`, `publishReport`).
+  * `src/constants/uiCopy.js` (`export const COMBINED_EVIDENCE_ENABLED = false` y función `isCombinedEvidenceEnabled()`).
+  * `src/pages/HomePage.jsx` (flujo condicional controlado por `combinedEnabled`).
+  * `src/components/Evidence.jsx`, `src/pages/ReportDetailPage.jsx`, `src/pages/ReportsPage.jsx`.
+* **Qué hace hoy el código:**
+  * Con el interruptor `COMBINED_EVIDENCE_ENABLED = false` (valor por defecto), la aplicación ejecuta **exactamente** el flujo vigente de RF-01 (voz sola o foto sola).
+  * Cuando el interruptor se activa (`COMBINED_EVIDENCE_ENABLED = true` o `localStorage.setItem('ux-combined-evidence', 'true')`), la pantalla inicial permite detener la nota de voz con el botón secundario **«Detener»**, sumar fotografías con **«+ Agregar foto»** o **«+ Agregar nota de voz»**, ver el contador **«X de 5 fotos»**, quitar elementos individuales antes de publicar y enviar todo bajo un único reporte y un único número de seguimiento.
+* **Opciones existentes:**
+  1. **Si el Product Owner aprueba el cambio en RF-01 y RNF-01:** cambiar `COMBINED_EVIDENCE_ENABLED = true` en `src/constants/uiCopy.js`.
+  2. **Si el Product Owner mantiene RF-01 sin cambios:** conservar `COMBINED_EVIDENCE_ENABLED = false` (las fotos adicionales se siguen agregando en «Agregar más detalles» según RF-02).
+* **Valor sugerido por defecto:** `COMBINED_EVIDENCE_ENABLED = false` hasta aprobación formal.
+
+---
+
+## 2. Conteo de los dos toques (RNF-01)
+
+* **Estado:** `[DECISIÓN PENDIENTE]`
+* **Ubicación en el código:**
+  * `src/pages/HomePage.jsx` (`handleMicClick`, `openCamera`, `handleCameraCapture`, `publishReport`).
   * `README.md` (línea 37: trazabilidad de RNF-01).
 * **Qué hace hoy el código:**
-  * **En nota de voz:** el primer toque en la tarjeta «Grabar nota de voz» inicia la grabación; el segundo toque en «Publicar reporte» (o de nuevo en la tarjeta activa) detiene la grabación y publica el reporte (o se publica automáticamente al cumplirse los 60 segundos).
-  * **En fotografía:** el primer toque en «Tomar foto» abre el selector/cámara nativa del dispositivo (`<input type="file" capture="environment">`); al confirmar la foto en la cámara del sistema operativo, `handleCameraCapture` invoca `publishReport()` automáticamente. Sin embargo, los diálogos nativos de permisos del navegador (micrófono, cámara, ubicación GPS) y la alerta preventiva de duplicados (`DuplicateWarning`) añaden interacciones cuando se presentan.
-* **Opciones existentes para decisión del equipo:**
-  1. **Opción A:** Contabilizar únicamente los toques realizados dentro de la interfaz de la aplicación web, excluyendo los diálogos nativos del sistema operativo/navegador (cámara nativa, permisos de navegador) y las alertas excepcionales de duplicidad.
-  2. **Opción B:** Contabilizar toda interacción física del usuario incluyendo el disparador de la cámara nativa, en cuyo caso la captura fotográfica con confirmación explícita de publicación requeriría 3 toques.
-* **Nota:** No se afirma cumplimiento certificado del límite de dos toques hasta que el equipo formalice esta regla de medición.
+  * En el flujo rápido de una sola evidencia, iniciar grabación (toque 1) y tocar «Publicar reporte» (toque 2) completa el envío; en fotografía, tocar «Tomar foto» abre la cámara y al seleccionar la imagen se invoca `publishReport()`. Sin embargo, los diálogos nativos de permisos del navegador (micrófono, cámara, GPS), el obturador nativo de la cámara del sistema operativo, el aviso de duplicidad (`DuplicateWarning`) y el flujo combinado opcional suman interacciones adicionales.
+* **Opciones existentes:**
+  1. **Opción A:** Contabilizar únicamente los toques dentro de la aplicación web en el **flujo rápido con una sola evidencia**, excluyendo permisos nativos del navegador, cámara del sistema operativo, alertas excepcionales de duplicidad y el flujo combinado opcional.
+  2. **Opción B:** Contabilizar toda interacción física incluyendo la cámara nativa del sistema operativo.
+* **Valor sugerido:** Definir formalmente la Opción A en la especificación de RNF-01. **No se afirma cumplimiento certificado del límite de dos toques mientras este punto esté abierto.**
 
 ---
 
-## 2. Publicación automática vs. botón explícito en fotografías (HU-02)
+## 3. Cantidad máxima de fotos, cantidad de audios y peso/compresión
 
+* **Estado:** `[DECISIÓN PENDIENTE]`
 * **Ubicación en el código:**
-  * `src/pages/HomePage.jsx` (líneas 155–180: `handleCameraCapture`, y líneas 346–358: acciones secundarias sobre borrador fotográfico y botón principal `Publicar reporte`).
+  * `src/constants/uiCopy.js` (`export const DEFAULT_MAX_PHOTOS_PER_REPORT = 5`, `export const DEFAULT_MAX_VOICE_SECONDS = 60`).
+  * `src/services/reportRepository.js` (líneas 95–107: `validatePhotos` permite hasta 8 fotos por carga técnica y máximo 10 MB por archivo en formatos JPG, PNG, WebP o AVIF).
+  * `src/hooks/useAudioRecorder.js` (línea 132: `audioBitsPerSecond: 32000` y límite de 60 segundos).
+* **Qué hace hoy el código:**
+  * Para audio: admite **1 nota de voz de hasta 60 segundos** codificada a 32 kbps.
+  * Para fotografías en el flujo combinado (Fase 7): usa la constante configurable `DEFAULT_MAX_PHOTOS_PER_REPORT = 5` y muestra el contador `"X de 5 fotos"` y el aviso *"Llegó al máximo de fotos"*. En el repositorio base (`validatePhotos`), el límite técnico provisional es de 8 fotos por selección y 10 MB por imagen sin recorte ni recompresión con pérdida.
+* **Opciones existentes:**
+  1. Unificar el límite en **5 fotografías por reporte** y **1 nota de voz de máximo 60 s**, agregando compresión cliente (Canvas/WebP) si se despliega en redes móviles lentas.
+  2. Mantener el límite técnico actual de 8 fotografías de hasta 10 MB en `reportRepository.js`.
+* **Valor sugerido por defecto:** `DEFAULT_MAX_PHOTOS_PER_REPORT = 5`, `DEFAULT_MAX_VOICE_SECONDS = 60`.
+
+---
+
+## 4. Subida parcial de evidencias cuando falla un archivo
+
+* **Estado:** `[PROPUESTA / DECISIÓN PENDIENTE]`
+* **Ubicación en el código:**
+  * `src/pages/HomePage.jsx` (validación individual por archivo en `handleCameraCapture` cuando `combinedEnabled` está activo y mensaje `uiCopy.home.partialPhotoError`).
+  * `src/services/reportRepository.js` (`createReport` guarda el registro completo en una sola transacción local de IndexedDB).
+* **Qué hace hoy el código:**
+  * Como el prototipo persiste localmente en IndexedDB sin subida HTTP multiparte a un servidor externo, el guardado de `createReport` es transaccional. Sin embargo, al adjuntar varias fotos en el flujo combinado, el código valida cada fotografía por separado: si una falla (por formato o peso), conserva todas las evidencias válidas previas, informa exactamente cuál archivo falló (`partialPhotoError`) y permite reintentar solo esa fotografía o publicar con las evidencias válidas ya cargadas.
+* **Opciones existentes (para futura integración con backend):**
+  1. Publicar el reporte con las evidencias que sí subieron y permitir reintentar únicamente el archivo fallido.
+  2. Mantener la publicación como transacción todo-o-nada conservando los archivos en pantalla para reintentar.
+* **Valor sugerido por defecto:** Conservar evidencias válidas e indicar exactamente cuál archivo falló para reintentar solo ese.
+
+---
+
+## 5. Publicación automática vs. botón explícito en fotografías (HU-02)
+
+* **Estado:** `[DECISIÓN PENDIENTE]`
+* **Ubicación en el código:**
+  * `src/pages/HomePage.jsx` (`handleCameraCapture`).
   * `docs/historias/HU-02/README.md`.
 * **Qué hace hoy el código:**
-  * Al seleccionar o capturar una fotografía válida en `handleCameraCapture`, se guarda el borrador en estado (`updateDraft`) y se llama de inmediato a `await publishReport()`. Si ocurre un error de ubicación o una alerta de duplicado, la fotografía queda visible en pantalla junto con el botón «Publicar reporte» y la acción secundaria «Repetir foto» para reintentar sin perder la evidencia.
-* **Opciones existentes para decisión del equipo:**
-  1. **Opción A (comportamiento actual conservado):** Mantener la publicación inmediata al seleccionar la foto para no añadir un toque extra al flujo rápido (RNF-01), dejando el botón «Publicar reporte» y «Repetir foto» activos si el usuario cancela el aviso de duplicado o si falla la obtención de GPS.
-  2. **Opción B:** No invocar `publishReport()` automáticamente en `handleCameraCapture`, sino mostrar primero la vista previa de la foto seleccionada y esperar a que el usuario toque explícitamente el botón «Publicar reporte» (lo cual alinea literalmente la frase de HU-02 *"capturar una fotografía... y presionar publicar"*, pero suma un toque adicional respecto a RNF-01).
+  * En el flujo rápido (y cuando se toma la primera foto sin evidencia previa), `handleCameraCapture` guarda la foto y llama a `publishReport()` automáticamente para no romper el flujo de dos toques (RNF-01). Si el envío se detiene por alerta de duplicado o error de GPS, la foto queda visible junto a los botones «Publicar reporte» y «Repetir foto». Si en el flujo combinado ya existía una evidencia previa, agregar una foto adicional no dispara el envío automático, sino que espera al botón «Publicar reporte».
+* **Opciones existentes:**
+  1. **Opción A (actual):** Publicar de inmediato cuando es foto única en flujo rápido, y esperar al botón «Publicar reporte» cuando se están sumando múltiples evidencias.
+  2. **Opción B:** Exigir siempre tocar «Publicar reporte» después de tomar la fotografía (alineado literalmente con el texto de HU-02, pero añade un tercer toque si se cuenta la cámara nativa).
+* **Valor sugerido por defecto:** Opción A mientras no se redefina el conteo de RNF-01.
 
 ---
 
-## 3. Momento de la georreferenciación (RF-01 vs. RF-03)
+## 6. Momento de la georreferenciación con una o varias evidencias (RF-01 vs. RF-03)
 
+* **Estado:** `[DECISIÓN PENDIENTE]`
 * **Ubicación en el código:**
-  * `src/pages/HomePage.jsx` (líneas 94–135: `capturedAt` registrado al iniciar la captura/selección y `getCurrentPosition()` invocado dentro de `publishReport`).
-  * `src/services/geolocation.js` (líneas 3–11: `getCurrentPosition` con `measuredAt`).
-  * `src/services/reportRepository.js` (líneas 128–133: persistencia de `createdAt`, `capturedAt`, `position` y `originalPosition`).
+  * `src/pages/HomePage.jsx` (`capturedAt` se fija en la primera evidencia capturada y se conserva en el borrador; `getCurrentPosition()` se solicita al ejecutar `publishReport()`).
+  * `src/services/geolocation.js`.
 * **Qué hace hoy el código:**
-  * `capturedAt` guarda la marca temporal del momento en que se inicia la grabación o se incorpora la fotografía, mientras que las coordenadas GPS (`getCurrentPosition()`) se solicitan al momento de publicar (`publishReport`). La interfaz explica este comportamiento fielmente en `uiCopy.home.autoLocationFootnote`.
-* **Opciones existentes para decisión del equipo:**
-  1. **Opción A (actual):** Solicitar el GPS al momento de publicar (evita pedir dos permisos simultáneos —micrófono + GPS— en el primer toque).
-  2. **Opción B:** Pre-solicitar el GPS en segundo plano apenas inicia la grabación o se abre la cámara, guardando esa coordenada inicial como `position` de captura y usando la coordenada al publicar solo como respaldo.
+  * Conserva `capturedAt` de la primera evidencia del borrador y obtiene las coordenadas GPS (`position`) en el instante de publicar. La nota informativa en pantalla (`uiCopy.home.autoLocationFootnote`) describe este comportamiento con exactitud.
+* **Opciones existentes:**
+  1. **Opción A (actual):** Usar la ubicación obtenida al presionar «Publicar reporte» y conservar `capturedAt` de la primera evidencia.
+  2. **Opción B:** Capturar una coordenada GPS al tomar la primera evidencia y usarla aunque el usuario camine unos metros antes de terminar de adjuntar la segunda evidencia.
+* **Valor sugerido por defecto:** Opción A (evita pedir permisos de micrófono y GPS al mismo tiempo en el primer toque).
 
 ---
 
-## 4. Nombre del botón de adhesión (RF-06 vs. HU-10)
+## 7. Reglas de edición posterior (quitar o reemplazar evidencia antes de «Admitido»)
 
+* **Estado:** `[DECISIÓN PENDIENTE]`
+* **Ubicación en el código:**
+  * `src/services/reportRepository.js` (líneas 158–218: `complementReport` actualmente solo **agrega** fotografías nuevas `[...current.photos, ...newPhotos]` y conserva intacto `current.audio`, tal como exige RF-02 y HU-03 vigentes).
+  * `src/pages/ReportDetailPage.jsx` (formulario de complementación).
+  * `src/pages/ReportsPage.jsx` (en Recepción municipal ya se muestra el aviso *"Modificado por el ciudadano · <fecha>"* cuando `report.receptionEvent === 'Información complementada'`).
+* **Qué hace hoy el código:**
+  * Siguiendo estrictamente **RF-02 y HU-03 vigentes** (y las pruebas de integración en `tests/main-integration.test.js` que verifican que las evidencias originales nunca se eliminan al complementar), `complementReport` permite **agregar** descripción, categoría, referencias, ubicación y fotografías adicionales, registrando el cambio en `history` y mostrando en Recepción municipal que el reporte fue modificado y cuándo.
+  * **No se implementó el borrado o reemplazo destructivo de evidencias ya guardadas en `complementReport`** porque el contrato actual del repositorio y las pruebas de regresión de HU-03/HU-04 exigen conservar las evidencias originales.
+* **Opciones existentes para el Product Owner:**
+  1. **Mantener RF-02 vigente:** En la edición posterior solo se permite **agregar** información y fotografías (nunca borrar evidencia ya registrada), mientras que en la pantalla inicial de captura (Fase 7) sí se puede quitar cualquier foto o audio antes de publicar.
+  2. **Aprobar la regla sugerida en la Sección 7 de v3:** Ampliar `complementReport` en `reportRepository.js` para permitir quitar o reemplazar fotos/audio propios únicamente cuando `report.status` sea `'Registrado / Recibido'` o `'En evaluación'` (bloqueándolo a partir de `'Admitido a trámite'`), dejando constancia en `history`.
+* **Valor sugerido por defecto:** Mantener solo adición en reportes ya publicados hasta que el Product Owner apruebe modificar RF-02.
+
+---
+
+## 8. Nombre del botón de adhesión (RF-06 vs. HU-10)
+
+* **Estado:** `[DECISIÓN PENDIENTE]`
 * **Ubicación en el código:**
   * `src/constants/uiCopy.js` (`uiCopy.detail.endorseToggleOpen`, `uiCopy.endorsement.formTitle`, `uiCopy.endorsement.submitIdle`).
-  * `src/components/ConfirmIncidentForm.jsx` (líneas 21–36).
-  * `src/components/IncidentMap.jsx` (línea 48).
-  * `src/pages/ReportDetailPage.jsx` (líneas 315–325).
+  * `src/components/ConfirmIncidentForm.jsx`, `src/components/IncidentMap.jsx`, `src/pages/ReportDetailPage.jsx`.
 * **Qué hace hoy el código:**
-  * Los documentos de requerimientos utilizan tres variantes distintas: *"A mí también me afecta"*, *"Confirmar situación"* (RF-06) y *"Confirmar incidente"* (HU-10).
-  * En `src/constants/uiCopy.js` se centralizó la etiqueta combinada `"A mí también me afecta (Confirmar incidente)"` y el encabezado `"A mí también me afecta"` para que sea comprensible al ciudadano sin romper la trazabilidad con HU-10.
-* **Opciones existentes para decisión del equipo:**
-  1. Dejar únicamente **`A mí también me afecta`** (recomendado por la guía de UX ciudadano).
-  2. Dejar únicamente **`Confirmar incidente`** (literal de HU-10).
-  3. Dejar **`Confirmar situación`** (variante de RF-06).
-  * *(Cualquiera de las tres opciones se cambia en una sola línea dentro de `src/constants/uiCopy.js`).*
+  * Utiliza el título ciudadano **`A mí también me afecta`** y en el botón de acción **`A mí también me afecta (Confirmar incidente)`**, reconciliando las tres variantes de los documentos (*"A mí también me afecta"*, *"Confirmar situación"* en RF-06 y *"Confirmar incidente"* en HU-10).
+* **Opciones existentes:**
+  1. Dejar solo `A mí también me afecta`.
+  2. Dejar solo `Confirmar incidente`.
+  3. Dejar `Confirmar situación`.
+* **Valor sugerido por defecto:** `A mí también me afecta (Confirmar incidente)` en `src/constants/uiCopy.js`.
 
 ---
 
-## 5. Nombre oficial del estado de admisión ("Admitido" vs. "Admitido a trámite")
+## 9. Nombre de los estados («Admitido» vs. «Admitido a trámite»)
 
+* **Estado:** `[DECISIÓN PENDIENTE]`
 * **Ubicación en el código:**
-  * `src/services/municipalDecisions.js` (línea 12: `admitted: 'Admitido a trámite'`).
-  * `src/constants/uiCopy.js` (`getCitizenStatusInfo`: reconoce tanto `Admitido` como `Admitido a trámite` y muestra la explicación ciudadana *"Su reporte fue aceptado y será atendido."*).
-  * `tests/main-integration.test.js` (línea 99: verifica `'Admitido a trámite'`).
+  * `src/services/municipalDecisions.js` (`municipalDecisionStatuses.admitted = 'Admitido a trámite'`).
+  * `src/constants/uiCopy.js` (`getCitizenStatusInfo`).
 * **Qué hace hoy el código:**
-  * En la base de datos local (`IndexedDB`), bitácora y consola municipal se conserva el valor oficial `'Admitido a trámite'` (según HU-12), sin alterarlo, y en la vista ciudadana se acompaña con la explicación sencilla del glosario.
-* **Opciones existentes para decisión del equipo:**
-  1. Mantener **`Admitido a trámite`** como nombre oficial en base de datos y bitácora (alineado con HU-12 y las pruebas de integración actuales).
-  2. Acortar a **`Admitido`** (literal de RF-08) en `municipalDecisions.js` y actualizar las pruebas correspondientes si el equipo decide unificarlo así en la especificación.
+  * Conserva `'Admitido a trámite'` en IndexedDB, bitácora y Recepción municipal (cumpliendo las pruebas de HU-12), y en la vista ciudadana muestra la explicación sencilla *"Su reporte fue aceptado y será atendido."* tanto para `'Admitido'` como para `'Admitido a trámite'`.
+* **Opciones existentes:**
+  1. Mantener `'Admitido a trámite'` como valor oficial.
+  2. Unificar en `'Admitido'` si se actualiza la especificación de HU-12.
+* **Valor sugerido por defecto:** `'Admitido a trámite'` en BD + explicación ciudadana en interfaz.
 
 ---
 
-## 6. Posición del aviso de duplicado respecto al botón de publicar
+## 10. Posición del aviso de duplicado respecto al botón de publicar
 
+* **Estado:** `[DECISIÓN PENDIENTE]`
 * **Ubicación en el código:**
-  * `src/pages/HomePage.jsx` (líneas 128–131 y 360–380: renderizado de `<DuplicateWarning />` justo encima del botón `.publish-button` «Publicar reporte»).
-  * `src/components/DuplicateWarning.jsx`.
+  * `src/pages/HomePage.jsx` y `src/components/DuplicateWarning.jsx`.
 * **Qué hace hoy el código:**
-  * Cuando la persona usuaria elige una categoría opcional y toca «Publicar reporte», el sistema obtiene las coordenadas, verifica duplicados en un radio de 50 metros y, si encuentra coincidencias abiertas, muestra el bloque `<DuplicateWarning />` inmediatamente encima del botón de publicación con las opciones «Ver reporte existente» y «Continuar con el envío».
-* **Opciones existentes para decisión del equipo:**
-  1. **Opción A (actual):** Mostrar el aviso tras tocar «Publicar reporte» (cuando ya se obtuvo la ubicación GPS real) y permitir confirmar con «Continuar con el envío».
-  2. **Opción B:** Pre-consultar ubicación y duplicados antes de tocar «Publicar reporte» (por ejemplo, al seleccionar la categoría), mostrando el aviso de forma preventiva arriba o debajo del botón sin detener el envío cuando se presiona «Publicar reporte».
+  * Muestra el aviso `<DuplicateWarning />` justo encima del botón «Publicar reporte» cuando se detectan reportes abiertos de la misma categoría dentro de los 50 metros, ofreciendo «Ver reporte existente» y «Continuar con el envío» sin bloquear la publicación.
+* **Opciones existentes:**
+  1. Mantener el aviso inmediatamente antes de confirmar el envío (cuando ya se conocen categoría y ubicación GPS).
+  2. Pre-consultar duplicados al elegir categoría antes de tocar «Publicar reporte».
+* **Valor sugerido por defecto:** Opción 1 (actual).
 
 ---
 
-## 7. Tratamiento gramatical del texto (usted, tuteo o voseo)
+## 11. Tratamiento del texto (usted, tuteo o voseo)
 
+* **Estado:** `[DECISIÓN PENDIENTE]`
 * **Ubicación en el código:**
-  * `src/constants/uiCopy.js` (`export const DEFAULT_TONE = 'usted'` y diccionario `COPY_BY_TONE`).
+  * `src/constants/uiCopy.js` (`export const DEFAULT_TONE = 'usted'`).
 * **Qué hace hoy el código:**
-  * Siguiendo la recomendación de la Sección 3 de `Recomendaciones_UX_Reporte_Ciudadano_v2.md`, toda la interfaz utiliza el tratamiento neutro/formal de **«usted»** por defecto (*"Reporte un problema en su comunidad"*, *"Grabe una nota de voz o tome una foto"*, *"Su reporte fue aceptado"*).
-* **Opciones existentes para decisión del equipo y Product Owner:**
-  1. **Usted / neutro (actual por defecto):** Adecuado para un servicio público municipal dirigido a personas de todas las edades.
-  2. **Tuteo (*tú*):** *"Reporta un problema en tu comunidad"*, *"Graba una nota de voz"*.
-  3. **Voseo (*vos*):** *"Reportá un problema en tu comunidad"*, *"Grabá una nota de voz"*.
-  * *(La arquitectura en `src/constants/uiCopy.js` permite agregar la clave `tuteo` o `voseo` en `COPY_BY_TONE` y cambiar `DEFAULT_TONE` en una sola línea).*
+  * Usa tratamiento formal/neutro de **«usted»** en toda la interfaz, centralizado en `COPY_BY_TONE.usted`.
+* **Opciones existentes:**
+  1. `usted` (actual por defecto).
+  2. `tuteo` (*tú*).
+  3. `voseo` (*vos*).
+* **Valor sugerido por defecto:** `DEFAULT_TONE = 'usted'`.
 
 ---
 
-## 8. Validación de la sección «Reportes que sigo» con el Product Owner
+## 12. Validación de la sección «Reportes que sigo» con el Product Owner
 
+* **Estado:** `[DECISIÓN PENDIENTE]`
 * **Ubicación en el código:**
   * `src/constants/uiCopy.js` (`export const ENABLE_FOLLOWED_REPORTS_SECTION = true`).
-  * `src/pages/ReportsPage.jsx` (líneas 320–329: renderizado condicional de la sección `<section className="citizen-reports-section followed-reports-section">`).
+  * `src/pages/ReportsPage.jsx`.
 * **Qué hace hoy el código:**
-  * La página ciudadana separa visualmente tres secciones: **«Mis reportes»** (solo los reportes propios según RF-02), **«Reportes que sigo»** (aquellos reportes de terceros en los que la persona usuaria registró su adhesión/confirmación en este navegador) y **«Problemas en mi comunidad»** (mapa de incidentes abiertos).
-  * La visibilidad de «Reportes que sigo» está controlada por la constante booleana `ENABLE_FOLLOWED_REPORTS_SECTION` en `src/constants/uiCopy.js`.
-* **Opciones existentes tras consultar al Product Owner:**
-  1. **Si el Product Owner aprueba la sección:** Mantener `ENABLE_FOLLOWED_REPORTS_SECTION = true`.
-  2. **Si el Product Owner solicita ceñirse estrictamente a solo avisos de resolución sin listado de seguidos:** Cambiar `ENABLE_FOLLOWED_REPORTS_SECTION = false` en `src/constants/uiCopy.js` (los avisos de resolución de HU-10 continúan mostrándose sin cambios).
+  * Muestra la sección «Reportes que sigo» separada de «Mis reportes» y «Problemas en mi comunidad». Puede ocultarse en un solo punto cambiando `ENABLE_FOLLOWED_REPORTS_SECTION = false`.
+* **Opciones existentes:**
+  1. Mantener `ENABLE_FOLLOWED_REPORTS_SECTION = true` si el Product Owner valida la sección.
+  2. Cambiar a `false` si se prefiere mostrar únicamente el bloque de avisos de resolución.
+* **Valor sugerido por defecto:** `ENABLE_FOLLOWED_REPORTS_SECTION = true`.
+
+---
+
+## 13. Privacidad en fotografías (rostros y placas de vehículos)
+
+* **Estado:** `[DECISIÓN PENDIENTE]`
+* **Ubicación en el código:**
+  * `src/pages/HomePage.jsx` (`uiCopy.home.permissionContext` / captura de cámara) y `src/pages/ReportDetailPage.jsx` (carga de fotografías).
+  * `README.md` (línea 22: *"No usar datos personales reales"*).
+* **Qué hace hoy el código:**
+  * Almacena las imágenes localmente en IndexedDB sin enviarlas a servidores externos. No aplica difuminado automático ni muestra una advertencia específica sobre rostros o matrículas vehiculares en la pantalla de captura para no sobrecargar de texto el flujo rápido.
+* **Opciones existentes:**
+  1. Agregar una nota breve junto al botón de cámara/fotografías: *"Evite incluir rostros de personas o placas de vehículos en las fotografías."* (configurable en `src/constants/uiCopy.js`).
+  2. Mantener la advertencia únicamente en los términos/documentación general sin añadir texto extra en la pantalla de captura.
+* **Valor sugerido por defecto:** Opción 2 mientras el equipo o el Product Owner definan si desean mostrar el aviso en pantalla.
