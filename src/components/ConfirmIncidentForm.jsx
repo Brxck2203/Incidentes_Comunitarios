@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { confirmIncident, getCurrentReporterId, validatePhotos } from '../services/reportRepository.js';
 import Evidence from './Evidence.jsx';
+import { uiCopy } from '../constants/uiCopy.js';
 
 export default function ConfirmIncidentForm({ ticket, onConfirmed, onCancel }) {
   const [photos, setPhotos] = useState([]);
@@ -18,9 +19,9 @@ export default function ConfirmIncidentForm({ ticket, onConfirmed, onCancel }) {
     finally { setBusy(false); }
   }
   return <form className="confirm-form" onSubmit={(event) => { void submit(event); }}>
-    <h3>Confirmar incidente existente</h3>
-    <p>Al confirmar, aumentarás el contador de vecinos afectados y recibirás avisos de resolución en «Mis reportes» de este navegador.</p>
-    <label>Fotografía complementaria (opcional)
+    <h3>{uiCopy.endorsement.formTitle}</h3>
+    <p>{uiCopy.endorsement.formExplanation}</p>
+    <label>{uiCopy.endorsement.optionalPhotoLabel}
       <input type="file" multiple accept="image/jpeg,image/png,image/webp,image/avif" disabled={busy}
         onChange={(event) => {
           try { setPhotos(validatePhotos(event.target.files)); setError(''); }
@@ -30,7 +31,9 @@ export default function ConfirmIncidentForm({ ticket, onConfirmed, onCancel }) {
     </label>
     <Evidence photos={photos} />
     {error && <p className="error-message" role="alert">{error}</p>}
-    <div className="actions"><button type="submit" disabled={busy}>{busy ? 'Confirmando…' : 'Confirmar incidente'}</button>
-      {onCancel && <button type="button" className="secondary" disabled={busy} onClick={onCancel}>Cancelar</button>}</div>
+    <div className="actions">
+      <button type="submit" disabled={busy}>{busy ? uiCopy.endorsement.submitBusy : uiCopy.endorsement.submitIdle}</button>
+      {onCancel && <button type="button" className="secondary" disabled={busy} onClick={onCancel}>{uiCopy.common.cancelAction}</button>}
+    </div>
   </form>;
 }

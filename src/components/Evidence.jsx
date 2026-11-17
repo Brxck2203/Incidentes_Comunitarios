@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { uiCopy } from '../constants/uiCopy.js';
 
 function BlobMedia({ blob, audio, index }) {
   const [url, setUrl] = useState('');
@@ -9,8 +10,8 @@ function BlobMedia({ blob, audio, index }) {
   }, [blob]);
   if (!url) return null;
   return audio
-    ? <audio controls src={url} aria-label="Nota de voz original" />
-    : <a href={url} target="_blank" rel="noreferrer"><img src={url} alt={`Evidencia del incidente ${index + 1}`} /></a>;
+    ? <audio controls src={url} aria-label={uiCopy.evidence.audioAria} />
+    : <a href={url} target="_blank" rel="noreferrer"><img src={url} alt={uiCopy.evidence.photoAlt(index)} /></a>;
 }
 
 export default function Evidence({ audio, photos = [] }) {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { uiCopy } from '../constants/uiCopy.js';
 
 export default function LocationMap({ position, onChange, editable = false }) {
   const container = useRef(null);
@@ -19,7 +20,7 @@ export default function LocationMap({ position, onChange, editable = false }) {
     }).addTo(instance);
     tiles.on('tileerror', () => setFailed(true));
     const pin = L.marker(point, {
-      draggable: editable, title: 'Ubicación del incidente',
+      draggable: editable, title: uiCopy.evidence.mapAria,
       icon: L.divIcon({ className: 'incident-pin', html: '<span aria-hidden="true">●</span>', iconSize: [32, 32], iconAnchor: [16, 16] }),
     }).addTo(instance);
     marker.current = pin;
@@ -35,8 +36,8 @@ export default function LocationMap({ position, onChange, editable = false }) {
     map.current?.panTo(point);
   }, [position.lat, position.lng]);
   return <>
-    <div ref={container} className="location-map" role="region" aria-label="Mapa de ubicación del incidente" />
-    {failed && <p role="alert">No se pudo cargar parte del mapa. Revisa tu conexión; las coordenadas siguen disponibles.</p>}
-    {editable && <p>Arrastra el marcador para ajustar el punto del incidente.</p>}
+    <div ref={container} className="location-map" role="region" aria-label={uiCopy.evidence.mapAria} />
+    {failed && <p role="alert">{uiCopy.evidence.mapTileError}</p>}
+    {editable && <p>{uiCopy.evidence.mapDragHint}</p>}
   </>;
 }

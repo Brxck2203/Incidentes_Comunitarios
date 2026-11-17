@@ -1,14 +1,21 @@
 import { Link } from 'react-router-dom';
+import { getCitizenStatusInfo, uiCopy } from '../constants/uiCopy.js';
 
 function formatDateTime(isoString) {
-  if (!isoString) return 'No disponible';
+  if (!isoString) return uiCopy.common.unavailable;
   const date = new Date(isoString);
-  if (Number.isNaN(date.getTime())) return 'No disponible';
+  if (Number.isNaN(date.getTime())) return uiCopy.common.unavailable;
   return date.toLocaleString('es-CR');
 }
 
 export default function JointAttentionPanel({ tracking, municipalView = false }) {
   if (!tracking?.isConsolidatedSecondary) return null;
+
+  const traceInfo = uiCopy.jointAttention.citizenTraceability(
+    tracking.ticket,
+    tracking.masterTicket || uiCopy.common.unavailable,
+  );
+  const statusInfo = getCitizenStatusInfo(tracking.effectiveStatus, tracking.effectiveDecision);
 
   return (
     <section
@@ -16,23 +23,28 @@ export default function JointAttentionPanel({ tracking, municipalView = false })
       aria-labelledby="joint-attention-title"
     >
       <div className="joint-attention-header">
-        <span className="joint-attention-badge">Atención conjunta</span>
+        <span className="joint-attention-badge">{uiCopy.jointAttention.badge}</span>
         <h2 id="joint-attention-title">
-          Seguimiento del expediente maestro
+          {municipalView ? uiCopy.jointAttention.municipalTitle : uiCopy.jointAttention.citizenTitle}
         </h2>
       </div>
 
+      {!municipalView && (
+        <p className="joint-attention-citizen-message">
+          <strong>{uiCopy.jointAttention.citizenLead}</strong>
+        </p>
+      )}
+
       <p className="joint-attention-lead">
-        Tu número de ticket <strong>{tracking.ticket}</strong> fue tomado en cuenta y unificado con el expediente
-        maestro{' '}
+        {traceInfo.prefix}{' '}
         {tracking.masterTicket
           ? <Link to={municipalView
             ? `/recepcion/${encodeURIComponent(tracking.masterTicket)}`
             : `/reportes/${encodeURIComponent(tracking.masterTicket)}`}>
             <strong>{tracking.masterTicket}</strong>
           </Link>
-          : <strong>No disponible</strong>}{' '}
-        para consultar el avance asociado sin reemplazar tu ticket original.
+          : <strong>{uiCopy.common.unavailable}</strong>}{' '}
+        {traceInfo.suffix}
       </p>
 
       {tracking.masterUnavailable ? (
@@ -44,20 +56,25 @@ export default function JointAttentionPanel({ tracking, municipalView = false })
         <>
           <dl className="joint-attention-metrics">
             <div className="joint-attention-metric-card">
-              <dt>Estado global del expediente maestro</dt>
-              <dd>{tracking.effectiveStatus}</dd>
+              <dt>{uiCopy.jointAttention.masterStatusLabel}</dt>
+              <dd>
+                {tracking.effectiveStatus}
+                {!municipalView && statusInfo.citizenExplanation && (
+                  <span className="status-explanation-inline"> — {statusInfo.citizenExplanation}</span>
+                )}
+              </dd>
             </div>
             <div className="joint-attention-metric-card">
-              <dt>Expediente maestro</dt>
+              <dt>{uiCopy.jointAttention.masterCodeLabel}</dt>
               <dd>{tracking.masterTicket}</dd>
             </div>
             <div className="joint-attention-metric-card">
-              <dt>Última actualización del maestro</dt>
+              <dt>{uiCopy.jointAttention.masterUpdatedLabel}</dt>
               <dd>{formatDateTime(tracking.effectiveUpdatedAt)}</dd>
             </div>
           </dl>
 
-          <h3>Avance global del expediente maestro</h3>
+          <h3>{uiCopy.jointAttention.timelineHeading}</h3>
           {tracking.masterProgressHistory.length > 0 ? (
             <ol className="joint-attention-timeline">
               {tracking.masterProgressHistory.map((entry, idx) => (
@@ -67,7 +84,7 @@ export default function JointAttentionPanel({ tracking, municipalView = false })
               ))}
             </ol>
           ) : (
-            <p>El expediente maestro se encuentra registrado y en espera de nuevas actualizaciones.</p>
+            <p>{uiCopy.jointAttention.timelineEmpty}</p>
           )}
         </>
       )}

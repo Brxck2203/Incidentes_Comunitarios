@@ -14,11 +14,13 @@ import Evidence from '../components/Evidence.jsx';
 import LocationMap from '../components/LocationMap.jsx';
 import MunicipalDecisionPanel from '../components/MunicipalDecisionPanel.jsx';
 import { subscribeToReportChanges } from '../services/reportNotifications.js';
+import { getCitizenStatusInfo, uiCopy } from '../constants/uiCopy.js';
+import { triggerUxFeedback } from '../services/uxFeedback.js';
 
 function formatDateTime(value) {
-  if (!value) return 'No disponible';
+  if (!value) return uiCopy.common.unavailable;
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? 'No disponible' : date.toLocaleString('es-CR');
+  return Number.isNaN(date.getTime()) ? uiCopy.common.unavailable : date.toLocaleString('es-CR');
 }
 
 export default function ReportDetailPage() {
@@ -34,11 +36,13 @@ export default function ReportDetailPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [copyFeedback, setCopyFeedback] = useState('');
   const [photoSelectionNotice, setPhotoSelectionNotice] = useState('');
   const busyRef = useRef(false);
   const operationRef = useRef(null);
   const mountedRef = useRef(false);
   const currentTicketRef = useRef(ticket);
+  const detailContentRef = useRef(null);
   const [confirmOpen, setConfirmOpen] = useState(Boolean(location.state?.confirm));
   const [viewerId] = useState(() => { try { return getCurrentReporterId(); } catch { return null; } });
   const [pendingEdit, setPendingEdit] = useState(null);
@@ -63,7 +67,7 @@ export default function ReportDetailPage() {
     let requestSequence = 0;
     currentTicketRef.current = ticket;
     setLoading(true); setError(''); setEditing(false); setReport(null); setDraft(null);
-    setMessage(''); setPhotos([]); setPhotoSelectionNotice('');
+    setMessage(''); setCopyFeedback(''); setPhotos([]); setPhotoSelectionNotice('');
     setConfirmOpen(Boolean(location.state?.confirm));
     setPendingEdit(null); setNearbyDraftMatches([]);
     async function loadTracking() {
@@ -106,7 +110,7 @@ export default function ReportDetailPage() {
           setDuplicateResult({
             key,
             info: { isSuspectedDuplicate: false, primaryMatch: null, matches: [] },
-            error: `No se pudo verificar posibles duplicados: ${failure.message}`,
+            error: `${uiCopy.duplicates.comparisonErrorPrefix} ${failure.message}`,
           });
         }
       });
@@ -155,7 +159,7 @@ export default function ReportDetailPage() {
         setPhotos([]);
         setPhotoSelectionNotice('');
         setPendingEdit(null);
-        setMessage('Cambios guardados.');
+        setMessage(uiCopy.detail.savedChangesNotice(updated.ticket));
       }
     } catch (failure) {
       if (mountedRef.current && currentTicketRef.current === snapshot.ticket) setError(failure.message);
@@ -177,26 +181,115 @@ export default function ReportDetailPage() {
     };
     await saveSnapshot(snapshot);
   }
-  if (loading) return <p role="status">Cargando reporte…</p>;
-  if (!report) return <section><h1>Reporte no disponible</h1><p role="alert">{error || 'No se encontró el ticket solicitado.'}</p><Link to={fromReception ? '/recepcion' : '/reportes'}>{fromReception ? 'Volver a recepción de reportes' : 'Volver a mis reportes'}</Link></section>;
+
+  function openEditMode() {
+    if (!report || !hasValidCoordinates(report.position)) return;
+    setDraft({
+      category: report.category || '',
+      description: report.description || '',
+      transcription: report.transcription || '',
+      references: report.references || '',
+      position: { ...report.position },
+    });
+    setEditing(true);
+    setMessage('');
+    setPhotoSelectionNotice('');
+    setPendingEdit(null);
+  }
+
+  async function handleCopyTrackingNumber() {
+    if (!report?.ticket) return;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(report.ticket);
+        triggerUxFeedback('action');
+        setCopyFeedback(uiCopy.confirmation.copiedNotice);
+      } else {
+        setCopyFeedback(uiCopy.confirmation.copyFallbackNotice);
+      }
+    } catch {
+      setCopyFeedback(uiCopy.confirmation.copyFallbackNotice);
+    }
+  }
+
+  if (loading) return <p role="status">{uiCopy.reportsPage.loading}</p>;
+  if (!report) return <section><h1>{uiCopy.detail.unavailableTitle}</h1><p role="alert">{error || uiCopy.detail.notFoundError}</p><Link to={fromReception ? '/recepcion' : '/reportes'}>{fromReception ? uiCopy.detail.backToReception : uiCopy.detail.backToMyReports}</Link></section>;
   const reportStatus = tracking?.masterUnavailable
-    ? 'Estado del maestro no disponible'
-    : tracking?.effectiveStatus ?? report.status ?? 'Estado no disponible';
+    ? uiCopy.common.masterStatusUnavailable
+    : tracking?.effectiveStatus ?? report.status ?? uiCopy.common.statusUnavailable;
+  const citizenStatus = getCitizenStatusInfo(reportStatus, tracking?.effectiveDecision ?? report.municipalDecision);
   const effectiveReportIsActive = !tracking?.masterUnavailable
     && isActiveReport({ ...report, status: tracking?.effectiveStatus ?? report.status });
   const masterTicket = report.masterTicket || report.consolidation?.masterTicket;
+  const accuracyMeters = Number.isFinite(report.originalPosition?.accuracy)
+    ? Math.round(report.originalPosition.accuracy)
+    : null;
+  const hasLowAccuracy = accuracyMeters !== null && accuracyMeters > 50;
+
   return <section>
     <Link className="text-link" to={fromReception ? '/recepcion' : '/reportes'}>
-      {fromReception ? 'Volver a recepción de reportes' : 'Volver a mis reportes'}
+      {fromReception ? uiCopy.detail.backToReception : uiCopy.detail.backToMyReports}
     </Link>
-    <h1>Detalle del reporte</h1>
-    {location.state?.created && <p className="success-message" role="status">Reporte guardado. Conserva tu código de seguimiento.</p>}
-    <p className="ticket">{report.ticket}</p>
-    <p>{reportStatus} · {formatDateTime(report.createdAt)}</p>
-    <p>Última actualización: {formatDateTime(tracking?.masterUnavailable ? null : tracking?.effectiveUpdatedAt ?? report.updatedAt)}</p>
+    <h1>{uiCopy.detail.title}</h1>
+
+    {location.state?.created && (
+      <section className="confirmation-banner" role="status" aria-live="polite">
+        <h2>{uiCopy.confirmation.title}</h2>
+        <p>{uiCopy.confirmation.subtitle}</p>
+        <div className="tracking-highlight-box">
+          <span className="tracking-highlight-label">{uiCopy.common.trackingNumberFirstMention}</span>
+          <strong className="tracking-highlight-code">{report.ticket}</strong>
+          <button type="button" className="secondary copy-ticket-button" onClick={() => { void handleCopyTrackingNumber(); }}>
+            {uiCopy.confirmation.copyAction}
+          </button>
+        </div>
+        {copyFeedback && <p className="copy-feedback" role="status">{copyFeedback}</p>}
+        <p className="confirmation-optional-note">{uiCopy.confirmation.optionalNote}</p>
+        {hasLowAccuracy && (
+          <p className="low-accuracy-notice" role="status">
+            {uiCopy.confirmation.lowAccuracyWarning(accuracyMeters)}
+          </p>
+        )}
+        <div className="actions">
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => detailContentRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })}
+          >
+            {uiCopy.confirmation.viewReportAction}
+          </button>
+          {hasValidCoordinates(report.position) && !editing && (
+            <button type="button" onClick={openEditMode}>
+              {uiCopy.confirmation.addDetailsAction}
+            </button>
+          )}
+        </div>
+      </section>
+    )}
+
+    <div ref={detailContentRef} className="report-summary-header">
+      <p className="ticket">
+        <span>{location.state?.created ? uiCopy.common.trackingNumberLabel : uiCopy.common.trackingNumberFirstMention}: </span>
+        <strong>{report.ticket}</strong>
+      </p>
+      <p>
+        <strong>{reportStatus}</strong>
+        {!fromReception && citizenStatus.citizenExplanation && (
+          <span> — {citizenStatus.citizenExplanation}</span>
+        )}
+      </p>
+      {!fromReception && citizenStatus.dismissalReason && (
+        <p className="dismissal-reason-banner" role="status">
+          <strong>Motivo informado:</strong> {citizenStatus.dismissalReason}
+        </p>
+      )}
+      <p>{uiCopy.detail.createdAtLabel}: {formatDateTime(report.createdAt)}</p>
+      <p>{uiCopy.detail.updatedAtLabel}: {formatDateTime(tracking?.masterUnavailable ? null : tracking?.effectiveUpdatedAt ?? report.updatedAt)}</p>
+    </div>
+
     <JointAttentionPanel tracking={tracking} municipalView={fromReception} />
     {masterTicket && <p className="consolidated-secondary-banner" role="status">
-      Este reporte está enlazado como solicitud secundaria al expediente principal{' '}
+      {uiCopy.jointAttention.secondaryBannerPrefix}{' '}
       <Link to={fromReception
         ? `/recepcion/${encodeURIComponent(masterTicket)}`
         : `/reportes/${encodeURIComponent(masterTicket)}`}>
@@ -206,9 +299,9 @@ export default function ReportDetailPage() {
     {error && <p className="error-message" role="alert">{error}</p>}
     {message && <p className="success-message" role="status">{message}</p>}
     {tracking?.effectiveDecision?.publicResponse && <section className="public-decision" aria-labelledby="public-decision-title">
-      <h2 id="public-decision-title">Respuesta de Recepción</h2>
+      <h2 id="public-decision-title">{uiCopy.detail.publicDecisionHeading}</h2>
       <p>{tracking.effectiveDecision.publicResponse}</p>
-      {tracking.effectiveDecision.at && <p>Registrada el {formatDateTime(tracking.effectiveDecision.at)}.</p>}
+      {tracking.effectiveDecision.at && <p>{uiCopy.detail.publicDecisionDate(formatDateTime(tracking.effectiveDecision.at))}</p>}
     </section>}
     <MunicipalDecisionPanel key={report.ticket} report={report} municipalView={fromReception} onSaved={(updated) => {
       if (currentTicketRef.current !== updated.ticket) return;
@@ -224,7 +317,7 @@ export default function ReportDetailPage() {
           publicResponse: updated.municipalDecision.publicResponse,
         } } : current);
     }} />
-    {duplicateLoading && <p role="status">Verificando posibles reportes duplicados…</p>}
+    {duplicateLoading && <p role="status">{uiCopy.duplicates.comparisonChecking}</p>}
     {duplicateStateCurrent && duplicateResult.error && <p className="error-message" role="alert">{duplicateResult.error}</p>}
     {duplicateStateCurrent && duplicateResult.info.isSuspectedDuplicate && (
       <DuplicateComparisonPanel
@@ -235,19 +328,19 @@ export default function ReportDetailPage() {
       />
     )}
     {duplicateStateCurrent && !duplicateResult.error && !duplicateResult.info.isSuspectedDuplicate && (
-      <p role="status">No se encontraron posibles reportes duplicados.</p>
+      <p role="status">{uiCopy.duplicates.comparisonNone}</p>
     )}
-    <h2>Evidencias</h2><Evidence audio={report.audio} photos={report.photos || []} />
+    <h2>{uiCopy.detail.evidenceHeading}</h2><Evidence audio={report.audio} photos={report.photos || []} />
     <ConsolidatedEvidenceSection report={report} />
     {report.confirmations?.some((confirmation) => confirmation.photos?.length > 0) && <>
-      <h3>Fotografías complementarias de vecinos</h3>
+      <h3>{uiCopy.detail.neighborPhotosHeading}</h3>
       <Evidence photos={report.confirmations.flatMap((confirmation) => confirmation.photos || [])} />
     </>}
-    {report.severity && <p>Severidad técnica: <strong>{report.severity}</strong></p>}
-    {endorsementCount(report) > 0 && <p>Vecinos que confirmaron: {endorsementCount(report)}</p>}
+    {report.severity && <p>{uiCopy.detail.technicalSeverityLabel}: <strong>{report.severity}</strong></p>}
+    {endorsementCount(report) > 0 && <p>{uiCopy.detail.confirmationsCountLabel(endorsementCount(report))}</p>}
     {effectiveReportIsActive && report.reporterId !== viewerId && !report.confirmations?.some((confirmation) => confirmation.reporterId === viewerId) && (
       <button type="button" onClick={() => setConfirmOpen((open) => !open)}>
-        {confirmOpen ? 'Cerrar confirmación' : 'Confirmar incidente'}
+        {confirmOpen ? uiCopy.detail.endorseToggleClose : uiCopy.detail.endorseToggleOpen}
       </button>
     )}
     {confirmOpen && effectiveReportIsActive && report.reporterId !== viewerId && (
@@ -256,79 +349,110 @@ export default function ReportDetailPage() {
         onConfirmed={(updated) => {
           setReport(updated);
           setConfirmOpen(false);
-          setMessage('Confirmación registrada.');
+          setMessage(uiCopy.detail.endorseSavedNotice);
         }}
         onCancel={() => setConfirmOpen(false)}
       />
     )}
-    {editing ? <form onSubmit={save}>
-      <h2>Agregar más detalles</h2>
-      <label>Categoría<select value={draft.category || ''} onChange={(event) => field('category', event.target.value)} disabled={busy}>
-        <option value="">Sin clasificar</option>{categories.map((category) => <option key={category}>{category}</option>)}
-      </select></label>
-      <label>Descripción<textarea maxLength={5000} value={draft.description || ''} onChange={(event) => field('description', event.target.value)} disabled={busy} /></label>
-      <label>Transcripción o complemento de la nota de voz<textarea maxLength={5000} value={draft.transcription || ''} onChange={(event) => field('transcription', event.target.value)} disabled={busy} /></label>
-      <label>Señas o referencias<textarea maxLength={2000} value={draft.references || ''} onChange={(event) => field('references', event.target.value)} disabled={busy} /></label>
-      <label>Agregar fotografías<input type="file" multiple accept="image/jpeg,image/png,image/webp,image/avif" disabled={busy} onChange={(event) => {
-        const input = event.currentTarget;
-        try {
-          if (busyRef.current) return;
-          if (!input.files?.length) return;
-          setPhotos(validatePhotos(input.files));
-          setPhotoSelectionNotice('');
-          setError('');
-          setPendingEdit(null);
-        } catch (failure) {
-          setPhotoSelectionNotice(`${failure.message} ${photos.length
-            ? 'Se conserva la selección válida que ya estaba pendiente.'
-            : 'No se agregó ninguna fotografía.'}`);
-        } finally {
-          input.value = '';
-        }
-      }} /></label>
-      {photoSelectionNotice && <p className="error-message" role="alert">{photoSelectionNotice}</p>}
-      {photos.length > 0 && <><h3>Fotografías nuevas pendientes</h3><Evidence photos={photos} /></>}
-      <h2>Ajustar ubicación</h2>
-      <LocationMap position={draft.position} editable={!busy} onChange={(position) => field('position', position)} />
-      <p>Latitud: {draft.position.lat.toFixed(6)} · Longitud: {draft.position.lng.toFixed(6)}</p>
+    {editing ? <form className="complement-form" onSubmit={save}>
+      <h2>{uiCopy.detail.editFormTitle}</h2>
+      <p className="field-help">{uiCopy.detail.editFormNote}: <strong>{report.ticket}</strong>.</p>
+
+      <fieldset className="complement-fieldset" disabled={busy}>
+        <legend>{uiCopy.detail.blockDescriptionLegend}</legend>
+        <label>{uiCopy.detail.descriptionFieldLabel}
+          <textarea maxLength={5000} value={draft.description || ''} onChange={(event) => field('description', event.target.value)} disabled={busy} />
+        </label>
+        <label>{uiCopy.detail.transcriptionFieldLabel}
+          <textarea maxLength={5000} value={draft.transcription || ''} onChange={(event) => field('transcription', event.target.value)} disabled={busy} />
+        </label>
+        <label>{uiCopy.detail.referencesFieldLabel}
+          <textarea maxLength={2000} value={draft.references || ''} onChange={(event) => field('references', event.target.value)} disabled={busy} />
+        </label>
+      </fieldset>
+
+      <fieldset className="complement-fieldset" disabled={busy}>
+        <legend>{uiCopy.detail.blockCategoryLegend}</legend>
+        <label>{uiCopy.detail.categoryFieldLabel}
+          <select value={draft.category || ''} onChange={(event) => field('category', event.target.value)} disabled={busy}>
+            <option value="">{uiCopy.common.unclassifiedCategory}</option>
+            {categories.map((category) => <option key={category}>{category}</option>)}
+          </select>
+          <span className="field-help">{uiCopy.detail.categoryFieldHelp}</span>
+        </label>
+      </fieldset>
+
+      <fieldset className="complement-fieldset" disabled={busy}>
+        <legend>{uiCopy.detail.blockPhotosLegend}</legend>
+        <label>{uiCopy.detail.addPhotosFieldLabel}
+          <input type="file" multiple accept="image/jpeg,image/png,image/webp,image/avif" disabled={busy} onChange={(event) => {
+            const input = event.currentTarget;
+            try {
+              if (busyRef.current) return;
+              if (!input.files?.length) return;
+              setPhotos(validatePhotos(input.files));
+              setPhotoSelectionNotice('');
+              setError('');
+              setPendingEdit(null);
+            } catch (failure) {
+              setPhotoSelectionNotice(`${failure.message} ${photos.length
+                ? 'Se conserva la selección válida que ya estaba pendiente.'
+                : 'No se agregó ninguna fotografía.'}`);
+            } finally {
+              input.value = '';
+            }
+          }} />
+        </label>
+        {photoSelectionNotice && <p className="error-message" role="alert">{photoSelectionNotice}</p>}
+        {photos.length > 0 && <><h3>{uiCopy.detail.pendingPhotosHeading}</h3><Evidence photos={photos} /></>}
+      </fieldset>
+
+      <fieldset className="complement-fieldset" disabled={busy}>
+        <legend>{uiCopy.detail.blockLocationLegend}</legend>
+        <LocationMap position={draft.position} editable={!busy} onChange={(position) => field('position', position)} />
+        <p>{uiCopy.detail.coordinatesLine(draft.position.lat.toFixed(6), draft.position.lng.toFixed(6))}</p>
+      </fieldset>
+
       {!pendingEdit && nearbyDraftMatches.length > 0 && <div className="duplicate-hint" role="status">
-        <strong>Hay reportes abiertos de la misma categoría cerca de esta ubicación.</strong>
+        <strong>{uiCopy.duplicates.editNearbyHint}</strong>
         <ul>{nearbyDraftMatches.map((match) => <li key={match.ticket}>
-          <Link to={`/reportes/${match.ticket}`} target="_blank" rel="noopener noreferrer">Ver {match.ticket}</Link> · {Math.round(match.distanceMeters)} m
+          <Link to={`/reportes/${match.ticket}`} target="_blank" rel="noopener noreferrer">
+            {uiCopy.duplicates.viewExistingAction(match.ticket)}
+          </Link> · {Math.round(match.distanceMeters)} m
         </li>)}</ul>
       </div>}
       {pendingEdit && <DuplicateWarning matches={pendingEdit.matches} busy={busy}
-        continueLabel="Guardar cambios de todos modos"
+        continueLabel={uiCopy.duplicates.continueSaveEditAction}
         onContinue={() => { void saveSnapshot(pendingEdit, true); }}
         onCancel={() => setPendingEdit(null)} />}
-      <div className="actions"><button type="submit" disabled={busy || Boolean(pendingEdit)}>{busy ? 'Guardando…' : 'Guardar cambios'}</button>
+      <div className="actions">
+        <button type="submit" disabled={busy || Boolean(pendingEdit)}>
+          {busy ? uiCopy.detail.savingChangesAction : uiCopy.detail.saveChangesAction}
+        </button>
         <button className="secondary" type="button" disabled={busy} onClick={() => {
           setEditing(false); setDraft(null); setPhotos([]); setPhotoSelectionNotice(''); setPendingEdit(null); setError('');
-        }}>Cancelar</button></div>
+        }}>{uiCopy.common.cancelAction}</button>
+      </div>
     </form> : <>
-      <h2>Información del incidente</h2>
-      <p>Categoría: {report.category || 'Sin clasificar'}</p>
-      <p className="preserve-lines">{report.description || 'Sin descripción adicional.'}</p>
-      {report.transcription && <p className="preserve-lines">Nota: {report.transcription}</p>}
-      {report.references && <p className="preserve-lines">Referencias: {report.references}</p>}
-      <h2>Ubicación</h2>
+      <h2>{uiCopy.detail.incidentInfoHeading}</h2>
+      <p>{uiCopy.detail.categoryLabel}: {report.category || uiCopy.common.unclassifiedCategory}</p>
+      <p className="preserve-lines">{report.description || uiCopy.detail.noDescription}</p>
+      {report.transcription && <p className="preserve-lines">{uiCopy.detail.transcriptionLabel}: {report.transcription}</p>}
+      {report.references && <p className="preserve-lines">{uiCopy.detail.referencesLabel}: {report.references}</p>}
+      <h2>{uiCopy.detail.locationHeading}</h2>
       {hasValidCoordinates(report.position)
         ? <><LocationMap position={report.position} />
-          <p>Latitud: {report.position.lat.toFixed(6)} · Longitud: {report.position.lng.toFixed(6)}</p></>
-        : <p>Ubicación no disponible.</p>}
-      {Number.isFinite(report.originalPosition?.accuracy) && <p>Precisión original del dispositivo: {Math.round(report.originalPosition.accuracy)} metros.</p>}
-      {hasValidCoordinates(report.position) && <button type="button" onClick={() => {
-        setDraft({
-          category: report.category || '',
-          description: report.description || '',
-          transcription: report.transcription || '',
-          references: report.references || '',
-          position: { ...report.position },
-        });
-        setEditing(true); setMessage(''); setPhotoSelectionNotice(''); setPendingEdit(null);
-      }}>Agregar más detalles</button>}
+          <p>{uiCopy.detail.coordinatesLine(report.position.lat.toFixed(6), report.position.lng.toFixed(6))}</p></>
+        : <p>{uiCopy.detail.locationUnavailable}</p>}
+      {accuracyMeters !== null && <p>{uiCopy.detail.deviceAccuracyLine(accuracyMeters)}</p>}
+      {hasLowAccuracy && !location.state?.created && (
+        <p className="low-accuracy-notice" role="status">
+          {uiCopy.confirmation.lowAccuracyWarning(accuracyMeters)}
+        </p>
+      )}
+      {hasValidCoordinates(report.position) && <button type="button" onClick={openEditMode}>{uiCopy.detail.addDetailsButton}</button>}
     </>}
-    <h2>Historial de actualizaciones</h2>
+    <h2>{uiCopy.detail.historyHeading}</h2>
     <ol>{(report.history || []).map((entry, index) => <li key={index}>{formatDateTime(entry.at)} · {entry.action}</li>)}</ol>
   </section>;
 }
