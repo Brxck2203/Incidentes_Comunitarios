@@ -1,4 +1,5 @@
 import { categories } from '../services/reportRepository.js';
+import { uiCopy } from '../constants/uiCopy.js';
 
 export default function MunicipalConsoleFilters({
   category,
@@ -10,22 +11,22 @@ export default function MunicipalConsoleFilters({
   onQueryChange,
 }) {
   return <fieldset className="municipal-console-filters">
-    <legend>Buscar y filtrar reportes</legend>
-    <label>Categoría
+    <legend>{uiCopy.municipal.filtersLegend}</legend>
+    <label>{uiCopy.municipal.categoryFilterLabel}
       <select value={category} onChange={(event) => onCategoryChange(event.target.value)}>
-        <option value="">Todas las categorías</option>
+        <option value="">{uiCopy.municipal.allCategoriesOption}</option>
         {categories.map((item) => <option key={item} value={item}>{item}</option>)}
       </select>
     </label>
-    <label>Estado
+    <label>{uiCopy.municipal.statusFilterLabel}
       <select value={status} onChange={(event) => onStatusChange(event.target.value)}>
-        <option value="">Todos los estados</option>
+        <option value="">{uiCopy.municipal.allStatusesOption}</option>
         {statuses.map((item) => <option key={item} value={item}>{item}</option>)}
       </select>
     </label>
-    <label>Ticket o descripción
+    <label>{uiCopy.municipal.queryFilterLabel}
       <input type="search" value={query} onChange={(event) => onQueryChange(event.target.value)}
-        placeholder="Buscar ticket o descripción" />
+        placeholder={uiCopy.municipal.queryFilterPlaceholder} />
     </label>
   </fieldset>;
 }

@@ -1,4 +1,4 @@
-// TODO: reemplazar o integrar en consola municipal cuando se integre HU-11
+import { uiCopy } from '../constants/uiCopy.js';
 
 export default function DuplicateBadge({ match, count = 1 }) {
   if (!match?.originalReport) return null;
@@ -6,17 +6,22 @@ export default function DuplicateBadge({ match, count = 1 }) {
   const distanceText = Number.isFinite(match.distanceMeters)
     ? `${match.distanceMeters} m`
     : '';
+  const summary = uiCopy.duplicates.municipalMatchesSummary(
+    match.originalReport.ticket,
+    distanceText,
+    count - 1,
+  );
 
   return (
-    <div className="duplicate-badge-container" role="status" aria-label="Indicador de posible duplicado">
+    <div className="duplicate-badge-container" role="status" aria-label={uiCopy.duplicates.municipalBadgeAria}>
       <span className="duplicate-badge">
         <span className="duplicate-badge-icon" aria-hidden="true">⚠</span>
-        <span>Posible duplicado</span>
+        <span>{uiCopy.duplicates.municipalBadge}</span>
       </span>
       <span className="duplicate-badge-meta">
-        Coincide con <strong>{match.originalReport.ticket}</strong>
-        {distanceText ? ` (${distanceText})` : ''}
-        {count > 1 ? ` y ${count - 1} más` : ''}
+        {summary.prefix} <strong>{summary.ticket}</strong>
+        {summary.distance}
+        {summary.extra}
       </span>
     </div>
   );

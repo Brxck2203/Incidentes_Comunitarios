@@ -86,20 +86,20 @@ export default function MunicipalDecisionPanel({ report, municipalView, onSaved 
     {error && <p className="error-message" role="alert">{error}</p>}
     {message && <p className="success-message" role="status">{message}</p>}
 
-    {!action && <>
-      {canEvaluate && <button type="button" disabled={busy} onClick={() => { setAction('evaluation'); setError(''); }}>
-        Marcar En evaluación
+    {!action && <div className="municipal-decision-actions">
+      {canEvaluate && <button type="button" className="decision-btn-evaluate" disabled={busy} onClick={() => { setAction('evaluation'); setError(''); }}>
+        <span aria-hidden="true">⏳</span> <span>Marcar En evaluación</span>
       </button>}
       {canAdjudicate && <>
-        <button type="button" className="secondary" disabled={busy} onClick={() => { setAction('admit'); setError(''); }}>
-          Admitir a trámite
+        <button type="button" className="decision-btn-admit" disabled={busy} onClick={() => { setAction('admit'); setError(''); }}>
+          <span aria-hidden="true">✓</span> <span>Admitir a trámite</span>
         </button>
-        <button type="button" className="secondary" disabled={busy} onClick={() => { setAction('dismiss'); setError(''); }}>
-          Desestimar
+        <button type="button" className="decision-btn-dismiss" disabled={busy} onClick={() => { setAction('dismiss'); setError(''); }}>
+          <span aria-hidden="true">✕</span> <span>Desestimar</span>
         </button>
       </>}
       {!canEvaluate && !canAdjudicate && <p role="status">No hay decisiones disponibles para el estado actual.</p>}
-    </>}
+    </div>}
 
     {action && <div className="municipal-decision-form">
       <h3>{actionLabel}</h3>

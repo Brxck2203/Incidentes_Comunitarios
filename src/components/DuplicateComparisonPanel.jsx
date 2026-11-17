@@ -1,17 +1,16 @@
 import { Link } from 'react-router-dom';
-
-// TODO: reemplazar o integrar con acción de consolidación cuando se integren HU-08 y HU-11
+import { uiCopy } from '../constants/uiCopy.js';
 
 function formatDateTime(isoString) {
-  if (!isoString) return 'Fecha no disponible';
+  if (!isoString) return uiCopy.common.dateUnavailable;
   const date = new Date(isoString);
-  if (Number.isNaN(date.getTime())) return 'Fecha no disponible';
+  if (Number.isNaN(date.getTime())) return uiCopy.common.dateUnavailable;
   return date.toLocaleString('es-CR');
 }
 
 function formatCoordinates(position) {
   if (!position || !Number.isFinite(position.lat) || !Number.isFinite(position.lng)) {
-    return 'Coordenadas no disponibles';
+    return uiCopy.common.coordinatesUnavailable;
   }
   return `${position.lat.toFixed(6)}, ${position.lng.toFixed(6)}`;
 }
@@ -35,10 +34,10 @@ export default function DuplicateComparisonPanel({
       <div className="duplicate-comparison-header">
         <span className="duplicate-badge">
           <span className="duplicate-badge-icon" aria-hidden="true">⚠</span>
-          <span>Posible duplicado</span>
+          <span>{uiCopy.duplicates.municipalBadge}</span>
         </span>
         <h2 id="duplicate-comparison-title">
-          Comparación con reporte preexistente en la misma zona y categoría
+          {uiCopy.duplicates.comparisonTitle}
         </h2>
       </div>
 
