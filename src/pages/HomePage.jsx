@@ -5,6 +5,8 @@ import { categories, createReport, findPotentialDuplicates, getCurrentReporterId
 import DuplicateWarning from '../components/DuplicateWarning.jsx';
 import { getCurrentPosition } from '../services/geolocation.js';
 import Evidence from '../components/Evidence.jsx';
+import { uiCopy } from '../constants/uiCopy.js';
+import { triggerUxFeedback } from '../services/uxFeedback.js';
 
 function MicrophoneIcon() {
   return (
@@ -49,6 +51,7 @@ export default function HomePage() {
   const [category, setCategory] = useState('');
   const [pendingReport, setPendingReport] = useState(null);
   const [error, setError] = useState('');
+  const [statusNotice, setStatusNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const draftRef = useRef(EMPTY_DRAFT);
   const publishing = useRef(false);
@@ -69,12 +72,13 @@ export default function HomePage() {
 
   async function persistReport(payload) {
     const report = await createReport(payload);
+    triggerUxFeedback('success');
     if (active.current) navigate(`/reportes/${report.ticket}`, { state: { created: true } });
   }
 
   async function continuePending() {
     if (publishing.current || !pendingReport) return;
-    publishing.current = true; setBusy(true); setError('');
+    publishing.current = true; setBusy(true); setError(''); setStatusNotice('');
     try { await persistReport(pendingReport); if (active.current) setPendingReport(null); }
     catch (failure) { if (active.current) setError(failure.message); }
     finally { publishing.current = false; if (active.current) setBusy(false); }
@@ -85,6 +89,7 @@ export default function HomePage() {
     publishing.current = true;
     setBusy(true);
     setError('');
+    setStatusNotice(options.stopReason === 'timeout' ? uiCopy.home.recordingTimeoutNotice : '');
     const currentDraft = draftRef.current;
     const snapshot = {
       ...currentDraft,
@@ -108,8 +113,8 @@ export default function HomePage() {
       }
       if (!audio?.size && !snapshot.photos.length) {
         setError(snapshot.mode === 'voice'
-          ? 'La grabación no generó audio. Vuelve a grabar antes de publicar.'
-          : 'Selecciona una fotografía o graba una nota de voz antes de publicar.');
+          ? uiCopy.home.emptyVoiceError
+          : uiCopy.home.missingEvidenceError);
         return;
       }
       const position = await getCurrentPosition();
@@ -148,15 +153,16 @@ export default function HomePage() {
       const files = input.files;
       if (!files?.length) return;
       if (voice.recording || voice.starting) {
-        setError('Detén la grabación antes de seleccionar una fotografía.');
+        setError(uiCopy.home.stopBeforePhotoError);
         return;
       }
       const selected = validatePhotos(files);
       if (selected.length) {
         if (hasEvidence(draftRef.current)
-          && !window.confirm('Hay una evidencia pendiente. ¿Deseas reemplazarla por esta fotografía?')) return;
+          && !window.confirm(uiCopy.home.replacePhotoConfirm)) return;
         updateDraft({ mode: 'photo', audio: null, photos: selected, capturedAt: getTimestamp() });
         setError('');
+        setStatusNotice('');
         await publishReport();
       }
     } catch (failure) {
@@ -177,9 +183,11 @@ export default function HomePage() {
       await publishReport({ stopReason: 'send' });
     } else {
       if (hasEvidence(draftRef.current)
-        && !window.confirm('Hay una evidencia pendiente. ¿Deseas reemplazarla por una nueva nota de voz?')) return;
+        && !window.confirm(uiCopy.home.replaceAudioConfirm)) return;
       updateDraft({ mode: 'voice', audio: null, photos: [], capturedAt: getTimestamp() });
       setError('');
+      setStatusNotice('');
+      triggerUxFeedback('record');
       await voice.start();
     }
   }
@@ -195,11 +203,23 @@ export default function HomePage() {
     }
   }
 
+  function discardAndRestartRecording() {
+    if (busy || publishing.current) return;
+    voice.discard();
+    updateDraft(EMPTY_DRAFT);
+    setError('');
+    setStatusNotice(uiCopy.home.discardedRecordingNotice);
+  }
+
+  const progressPercent = Math.max(0, Math.min(100, Math.round(((60 - voice.seconds) / 60) * 100)));
+  const activeError = error || voice.error;
+
   return (
     <section aria-labelledby="capture-title">
-      <p className="eyebrow">Tu comunidad, en tus manos</p>
-      <h1 id="capture-title">¿Qué está pasando?</h1>
-      <p className="lead">Graba una nota de voz o toma una fotografía. Podrás agregar los detalles después.</p>
+      <p className="eyebrow">{uiCopy.home.eyebrow}</p>
+      <h1 id="capture-title">{uiCopy.home.title}</h1>
+      <p className="lead">{uiCopy.home.lead}</p>
+      <p className="permission-context-note">{uiCopy.home.permissionContext}</p>
 
       <div className="capture-actions">
         <button
@@ -207,7 +227,7 @@ export default function HomePage() {
           className={`capture-action-card mic-card ${voice.recording ? 'recording-active' : ''}`}
           disabled={busy || voice.starting || Boolean(pendingReport)}
           onClick={() => { void handleMicClick(); }}
-          aria-label={voice.recording ? 'Detener grabación y enviar reporte' : 'Grabar nota de voz y enviar al instante'}
+          aria-label={voice.recording ? uiCopy.home.micAriaRecording : uiCopy.home.micAriaIdle}
         >
           <span className="action-icon-circle">
             {voice.recording ? <StopIcon /> : <MicrophoneIcon />}
@@ -215,13 +235,13 @@ export default function HomePage() {
           <span className="action-card-text">
             <strong className="action-title">
               {voice.starting
-                ? 'Activando micrófono…'
+                ? uiCopy.home.micStartingTitle
                 : voice.recording
-                ? `Grabando (${voice.seconds}s)`
-                : 'Grabar nota de voz'}
+                  ? uiCopy.home.micRecordingTitle(voice.seconds)
+                  : uiCopy.home.micIdleTitle}
             </strong>
             <span className="action-subtitle">
-              {voice.recording ? 'Toca para enviar de inmediato' : 'Toca para grabar y enviar'}
+              {voice.recording ? uiCopy.home.micRecordingSubtitle : uiCopy.home.micIdleSubtitle}
             </span>
           </span>
         </button>
@@ -231,14 +251,14 @@ export default function HomePage() {
           className="capture-action-card camera-card"
           disabled={busy || voice.starting || voice.recording || Boolean(pendingReport)}
           onClick={openCamera}
-          aria-label="Tomar fotografía con la cámara y enviar al instante"
+          aria-label={uiCopy.home.cameraAria}
         >
           <span className="action-icon-circle">
             <CameraIcon />
           </span>
           <span className="action-card-text">
-            <strong className="action-title">Tomar fotografía</strong>
-            <span className="action-subtitle">Abre la cámara y envía al instante</span>
+            <strong className="action-title">{uiCopy.home.cameraTitle}</strong>
+            <span className="action-subtitle">{uiCopy.home.cameraSubtitle}</span>
           </span>
         </button>
 
@@ -255,29 +275,29 @@ export default function HomePage() {
         />
       </div>
 
-      <label className="report-category-field">Categoría del incidente (opcional)
-        <select value={category} disabled={busy || Boolean(pendingReport)} onChange={(event) => setCategory(event.target.value)}>
-          <option value="">Seleccionar después</option>
-          {categories.map((value) => <option key={value} value={value}>{value}</option>)}
-        </select>
-        <span className="field-help">Seleccionarla permite detectar reportes cercanos antes de enviarlo. Puedes seguir reportando sin elegirla.</span>
-      </label>
-
-      {pendingReport && <DuplicateWarning matches={pendingReport.matches} busy={busy}
-        onContinue={() => { void continuePending(); }}
-        onCancel={() => { setPendingReport(null); setError(''); }} />}
-
       {busy && (
         <div className="sending-indicator" role="status" aria-live="polite">
           <span className="spinner" aria-hidden="true" />
-          <span>Obteniendo ubicación y guardando el reporte local…</span>
+          <span>{uiCopy.home.publishingStatus}</span>
         </div>
       )}
 
       {voice.recording && (
-        <div className="recording-status" role="status">
-          <p><strong>Grabando nota de voz</strong> · {voice.seconds} segundos restantes</p>
-          <p>Al tocar nuevamente el ícono de micrófono se enviará de inmediato.</p>
+        <div className="recording-status" role="status" aria-live="polite">
+          <p className="recording-countdown-title">
+            <strong>{uiCopy.home.recordingStatusHeader(voice.seconds)}</strong>
+          </p>
+          <div
+            className="recording-progress-track"
+            role="progressbar"
+            aria-label={uiCopy.home.recordingStatusHeader(voice.seconds)}
+            aria-valuemin={0}
+            aria-valuemax={60}
+            aria-valuenow={60 - voice.seconds}
+          >
+            <div className="recording-progress-bar" style={{ width: `${progressPercent}%` }} />
+          </div>
+          <p>{uiCopy.home.recordingStatusHint}</p>
           <div className="recording-status-actions">
             <button
               type="button"
@@ -285,7 +305,7 @@ export default function HomePage() {
               onClick={() => { void handleMicClick(); }}
               disabled={busy}
             >
-              Detener y enviar ahora
+              {uiCopy.common.publishAction}
             </button>
             <button
               type="button"
@@ -293,10 +313,22 @@ export default function HomePage() {
               onClick={stopForReview}
               disabled={busy}
             >
-              Detener y escuchar primero
+              {uiCopy.home.stopAndListenAction}
+            </button>
+            <button
+              type="button"
+              className="secondary discard-recording-button"
+              onClick={discardAndRestartRecording}
+              disabled={busy}
+            >
+              {uiCopy.home.discardRecordingAction}
             </button>
           </div>
         </div>
+      )}
+
+      {statusNotice && !voice.recording && (
+        <p className="info-message" role="status">{statusNotice}</p>
       )}
 
       <Evidence
@@ -304,7 +336,42 @@ export default function HomePage() {
         photos={draft.mode === 'photo' ? draft.photos : []}
       />
 
-      {(error || voice.error) && <p className="error-message" role="alert">{error || voice.error}</p>}
+      {!voice.recording && draft.mode === 'voice' && Boolean(draft.audio?.size) && (
+        <div className="draft-secondary-actions">
+          <button
+            type="button"
+            className="secondary discard-recording-button"
+            disabled={busy}
+            onClick={discardAndRestartRecording}
+          >
+            {uiCopy.home.discardRecordingAction}
+          </button>
+        </div>
+      )}
+
+      {!voice.recording && draft.mode === 'photo' && draft.photos.length > 0 && (
+        <div className="draft-secondary-actions">
+          <button
+            type="button"
+            className="secondary"
+            disabled={busy}
+            onClick={openCamera}
+          >
+            {uiCopy.home.retakePhotoAction}
+          </button>
+        </div>
+      )}
+
+      {pendingReport && <DuplicateWarning matches={pendingReport.matches} busy={busy}
+        onContinue={() => { void continuePending(); }}
+        onCancel={() => { setPendingReport(null); setError(''); }} />}
+
+      {activeError && (
+        <div className="error-message" role="alert">
+          <p>{activeError}</p>
+          {hasEvidence(draft) && <p className="error-retry-hint">{uiCopy.home.retryHint}</p>}
+        </div>
+      )}
 
       <button
         className="publish-button"
@@ -312,11 +379,19 @@ export default function HomePage() {
         disabled={busy || voice.starting || Boolean(pendingReport) || (!voice.recording && !voice.audio && !draft.photos.length)}
         onClick={() => { void publishReport(); }}
       >
-        {busy ? 'Obteniendo ubicación y guardando…' : 'Publicar reporte'}
+        {busy ? uiCopy.home.publishButtonBusy : uiCopy.home.publishButtonIdle}
       </button>
 
-      <p>Se asociarán la ubicación del dispositivo al publicar y la fecha de incorporación de la evidencia.</p>
-      <Link className="text-link" to="/reportes">Consultar mis reportes</Link>
+      <label className="report-category-field">{uiCopy.home.categoryLabel}
+        <select value={category} disabled={busy || Boolean(pendingReport)} onChange={(event) => setCategory(event.target.value)}>
+          <option value="">{uiCopy.home.categoryPlaceholder}</option>
+          {categories.map((value) => <option key={value} value={value}>{value}</option>)}
+        </select>
+        <span className="field-help">{uiCopy.home.categoryHelp}</span>
+      </label>
+
+      <p className="auto-location-footnote">{uiCopy.home.autoLocationFootnote}</p>
+      <Link className="text-link" to="/reportes">{uiCopy.home.goToMyReports}</Link>
     </section>
   );
 }

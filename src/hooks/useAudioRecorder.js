@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { uiCopy } from '../constants/uiCopy.js';
 
 export default function useAudioRecorder({ onTimeout } = {}) {
   const session = useRef(null);
@@ -45,7 +46,7 @@ export default function useAudioRecorder({ onTimeout } = {}) {
         recordingRef.current = false;
         if (alive.current) {
           setRecording(false);
-          setError(failure.message || 'No se pudo completar la grabación. Vuelve a intentarlo.');
+          setError(failure.message || uiCopy.permissions.micFailed);
         }
         settle(current, null, failure);
       }
@@ -56,6 +57,33 @@ export default function useAudioRecorder({ onTimeout } = {}) {
   function stop(reason = 'review') {
     if (!session.current) return Promise.resolve(audio);
     return requestStop(session.current, reason);
+  }
+
+  function discard() {
+    const current = session.current;
+    if (current) {
+      clearSessionTimer(current);
+      current.stopReason = 'discard';
+      current.abandoned = true;
+      current.stopPromise ??= current.resultPromise;
+      if (current.recorder.state === 'recording') {
+        try {
+          current.recorder.stop();
+        } catch {
+          // Descarte solicitado por la persona usuaria.
+        }
+      }
+      stopTracks(current);
+      recordingRef.current = false;
+      settle(current, null);
+      session.current = null;
+    }
+    if (alive.current) {
+      setAudio(null);
+      setRecording(false);
+      setSeconds(60);
+      setError('');
+    }
   }
 
   useEffect(() => {
@@ -91,7 +119,7 @@ export default function useAudioRecorder({ onTimeout } = {}) {
     let current;
     try {
       if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
-        throw new Error('La grabación requiere un navegador compatible y HTTPS o localhost.');
+        throw new Error(uiCopy.permissions.micUnsupported);
       }
       media = await navigator.mediaDevices.getUserMedia({ audio: true });
       if (!alive.current) {
@@ -101,7 +129,7 @@ export default function useAudioRecorder({ onTimeout } = {}) {
       stream.current = media;
       const mimeType = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus']
         .find((type) => MediaRecorder.isTypeSupported(type));
-      if (!mimeType) throw new Error('Este navegador no dispone de un formato de audio compatible.');
+      if (!mimeType) throw new Error(uiCopy.permissions.micFormatUnsupported);
 
       const recorder = new MediaRecorder(media, { mimeType, audioBitsPerSecond: 32000 });
       const chunks = [];
@@ -132,7 +160,7 @@ export default function useAudioRecorder({ onTimeout } = {}) {
         clearSessionTimer(current);
         stopTracks(current);
         const blob = new Blob(chunks, { type: recorder.mimeType });
-        const finalAudio = blob.size ? blob : null;
+        const finalAudio = blob.size && current.stopReason !== 'discard' ? blob : null;
         if (alive.current && !current.abandoned) {
           setAudio(finalAudio);
           setRecording(false);
@@ -143,10 +171,10 @@ export default function useAudioRecorder({ onTimeout } = {}) {
           try {
             Promise.resolve(onTimeoutRef.current?.(finalAudio))
               .catch((failure) => {
-                if (alive.current) setError(failure.message || 'No se pudo publicar el reporte.');
+                if (alive.current) setError(failure.message || uiCopy.permissions.micFailed);
               });
           } catch (failure) {
-            if (alive.current) setError(failure.message || 'No se pudo publicar el reporte.');
+            if (alive.current) setError(failure.message || uiCopy.permissions.micFailed);
           }
         }
       };
@@ -155,10 +183,10 @@ export default function useAudioRecorder({ onTimeout } = {}) {
         stopTracks(current);
         recordingRef.current = false;
         if (alive.current && !current.abandoned) {
-          setError('No se pudo completar la grabación. Vuelve a intentarlo.');
+          setError(uiCopy.permissions.micFailed);
           setRecording(false);
         }
-        settle(current, null, new Error('No se pudo completar la grabación. Vuelve a intentarlo.'));
+        settle(current, null, new Error(uiCopy.permissions.micFailed));
       };
 
       recorder.start();
@@ -191,7 +219,7 @@ export default function useAudioRecorder({ onTimeout } = {}) {
       if (alive.current) {
         setRecording(false);
         setError(failure.name === 'NotAllowedError'
-          ? 'Permite el acceso al micrófono para grabar.'
+          ? uiCopy.permissions.micDenied
           : failure.message);
       }
     } finally {
@@ -200,5 +228,5 @@ export default function useAudioRecorder({ onTimeout } = {}) {
     }
   }
 
-  return { audio, recording, starting, seconds, error, start, stop };
+  return { audio, recording, starting, seconds, error, start, stop, discard };
 }
