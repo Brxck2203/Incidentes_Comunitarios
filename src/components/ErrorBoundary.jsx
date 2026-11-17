@@ -1,4 +1,5 @@
 import { Component } from 'react';
+import { uiCopy } from '../constants/uiCopy.js';
 
 export default class ErrorBoundary extends Component {
   state = { hasError: false };
@@ -15,10 +16,10 @@ export default class ErrorBoundary extends Component {
     if (this.state.hasError) {
       return (
         <main className="error-screen" role="alert">
-          <h1>No pudimos mostrar esta pantalla</h1>
-          <p>Recarga la aplicación para volver a intentarlo.</p>
+          <h1>{uiCopy.errorBoundary.title}</h1>
+          <p>{uiCopy.errorBoundary.description}</p>
           <button type="button" onClick={() => window.location.reload()}>
-            Recargar aplicación
+            {uiCopy.errorBoundary.reloadAction}
           </button>
         </main>
       );
