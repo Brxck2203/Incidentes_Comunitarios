@@ -3,6 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { isActiveReport } from '../services/reportEndorsements.js';
 import { hasValidCoordinates, municipalStatusLabel } from '../services/municipalConsole.js';
+import { uiCopy } from '../constants/uiCopy.js';
 
 // Citizen-facing map; native popup buttons provide a direct path to confirming an existing report.
 export default function IncidentMap({ reports, trackingByTicket = {}, onSelect }) {
@@ -41,17 +42,17 @@ export default function IncidentMap({ reports, trackingByTicket = {}, onSelect }
       }).addTo(group);
       const popup = L.DomUtil.create('div', 'incident-popup');
       const text = L.DomUtil.create('p', '', popup);
-      text.textContent = `${report.category || 'Sin clasificar'} · ${municipalStatusLabel(report, data.trackingByTicket)}`;
+      text.textContent = `${report.category || uiCopy.common.unclassifiedCategory} · ${municipalStatusLabel(report, data.trackingByTicket)}`;
       const code = L.DomUtil.create('p', '', popup);
       code.textContent = report.ticket;
       const button = L.DomUtil.create('button', '', popup);
       button.type = 'button';
-      button.textContent = 'Confirmar incidente';
+      button.textContent = uiCopy.endorsement.submitIdle;
       button.addEventListener('click', () => { select.current?.(report.ticket); marker.closePopup(); });
       marker.bindPopup(popup);
     }
     if (group.getLayers().length) mapRef.current.fitBounds(group.getBounds().pad(0.1), { maxZoom: 15 });
   // Preserve open popups and map zoom when polling returns the same incidents.
   }, [mapSignature]);
-  return <div ref={container} className="location-map" role="region" aria-label="Mapa de incidentes abiertos" />;
+  return <div ref={container} className="location-map" role="region" aria-label="Mapa de incidentes abiertos en la comunidad" />;
 }
