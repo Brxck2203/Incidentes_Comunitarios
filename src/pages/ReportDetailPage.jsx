@@ -13,6 +13,7 @@ import JointAttentionPanel from '../components/JointAttentionPanel.jsx';
 import Evidence from '../components/Evidence.jsx';
 import LocationMap from '../components/LocationMap.jsx';
 import MunicipalDecisionPanel from '../components/MunicipalDecisionPanel.jsx';
+import CrewReassignmentPanel from '../components/CrewReassignmentPanel.jsx';
 import { subscribeToReportChanges } from '../services/reportNotifications.js';
 
 function formatDateTime(value) {
@@ -224,6 +225,18 @@ export default function ReportDetailPage() {
           publicResponse: updated.municipalDecision.publicResponse,
         } } : current);
     }} />
+    <CrewReassignmentPanel
+      key={`reassign-${report.ticket}`}
+      report={report}
+      municipalView={fromReception}
+      onSaved={(updated) => {
+        if (currentTicketRef.current !== updated.ticket) return;
+        setReport(updated);
+        setTracking((current) => current
+          ? { ...current, effectiveStatus: updated.status, effectiveUpdatedAt: updated.updatedAt }
+          : current);
+      }}
+    />
     {duplicateLoading && <p role="status">Verificando posibles reportes duplicados…</p>}
     {duplicateStateCurrent && duplicateResult.error && <p className="error-message" role="alert">{duplicateResult.error}</p>}
     {duplicateStateCurrent && duplicateResult.info.isSuspectedDuplicate && (

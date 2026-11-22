@@ -290,3 +290,12 @@ audio { width: 100%; min-height: 48px; margin-top: 1rem; }
 .municipal-decision-panel .actions { gap: .75rem; }
 .public-decision { border-color: #166534; background: #f0fdf4; }
 .public-decision p { overflow-wrap: anywhere; }
+
+/* HU-16: reasignación de incidente a otra dependencia o cuadrilla con motivo obligatorio. */
+.crew-reassignment-panel { margin: 1.5rem 0; padding: 1.25rem; border: 2px solid #123f73; border-radius: .75rem; background: #f8fbff; }
+.crew-reassignment-panel h2 { margin-top: 0; }
+.crew-assignment-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .75rem; margin: .75rem 0 1rem; padding: .85rem 1rem; background: #fff; border: 1px solid #cbd5e1; border-radius: .5rem; }
+.crew-assignment-summary dt { font-size: .85rem; font-weight: 650; color: #475569; }
+.crew-assignment-summary dd { margin: .15rem 0 0; color: #152b3c; overflow-wrap: anywhere; }
+.crew-reassignment-form { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #bfdbfe; }
+.crew-reassignment-form h3 { margin-top: 0; }
