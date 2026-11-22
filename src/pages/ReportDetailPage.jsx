@@ -13,6 +13,7 @@ import JointAttentionPanel from '../components/JointAttentionPanel.jsx';
 import Evidence from '../components/Evidence.jsx';
 import LocationMap from '../components/LocationMap.jsx';
 import MunicipalDecisionPanel from '../components/MunicipalDecisionPanel.jsx';
+import ClosureCertificatePanel from '../components/ClosureCertificatePanel.jsx';
 import { subscribeToReportChanges } from '../services/reportNotifications.js';
 
 function formatDateTime(value) {
@@ -210,6 +211,21 @@ export default function ReportDetailPage() {
       <p>{tracking.effectiveDecision.publicResponse}</p>
       {tracking.effectiveDecision.at && <p>Registrada el {formatDateTime(tracking.effectiveDecision.at)}.</p>}
     </section>}
+    <ClosureCertificatePanel
+      key={`closure-${report.ticket}-${reportStatus}`}
+      report={tracking?.isConsolidatedSecondary && !tracking?.masterUnavailable
+        ? { ...report, status: tracking.effectiveStatus, updatedAt: tracking.effectiveUpdatedAt }
+        : report}
+      municipalView={fromReception}
+      onConfirmed={(updated) => {
+        if (currentTicketRef.current === updated.ticket) {
+          setReport(updated);
+        }
+        setTracking((current) => current
+          ? { ...current, effectiveStatus: updated.status, effectiveUpdatedAt: updated.updatedAt }
+          : current);
+      }}
+    />
     <MunicipalDecisionPanel key={report.ticket} report={report} municipalView={fromReception} onSaved={(updated) => {
       if (currentTicketRef.current !== updated.ticket) return;
       setReport(updated);
