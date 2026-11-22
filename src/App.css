@@ -290,3 +290,22 @@ audio { width: 100%; min-height: 48px; margin-top: 1rem; }
 .municipal-decision-panel .actions { gap: .75rem; }
 .public-decision { border-color: #166534; background: #f0fdf4; }
 .public-decision p { overflow-wrap: anywhere; }
+
+/* HU-22: pestaña de Historial de Auditoría cronológico e inmutable. */
+.municipal-tabs { display: flex; flex-wrap: wrap; gap: .75rem; margin: 1.25rem 0; padding-bottom: .75rem; border-bottom: 2px solid #cbd5e1; }
+.municipal-tab-button { min-height: 48px; }
+.audit-history-panel { margin: 1.25rem 0 2rem; padding: 1.5rem; background: #fff; border: 2px solid #123f73; border-radius: .85rem; }
+.audit-history-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .75rem; }
+.audit-history-header h2 { margin: 0; }
+.audit-readonly-badge { display: inline-flex; align-items: center; padding: .25rem .75rem; border-radius: 999px; background: #e2e8f0; color: #1e293b; font-size: .85rem; font-weight: 700; }
+.audit-history-lead { margin: .75rem 0 1.25rem; color: #334155; }
+.audit-history-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 1rem; }
+.audit-history-card { padding: 1.15rem; background: #f8fafc; border: 1px solid #cbd5e1; border-left: 5px solid #123f73; border-radius: .65rem; }
+.audit-history-card-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .5rem; margin-bottom: .4rem; }
+.audit-sequence-pill { display: inline-block; padding: .15rem .6rem; border-radius: 999px; background: #123f73; color: #fff; font-size: .82rem; font-weight: 700; }
+.audit-timestamp { font-size: .9rem; font-weight: 650; color: #475569; }
+.audit-event-title { margin: .25rem 0 .75rem; font-size: 1.1rem; color: #152b3c; }
+.audit-metadata-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: .75rem; margin: 0 0 .75rem; padding: .85rem 1rem; background: #fff; border: 1px solid #e2e8f0; border-radius: .5rem; }
+.audit-metadata-grid dt { font-size: .82rem; font-weight: 650; color: #475569; }
+.audit-metadata-grid dd { margin: .15rem 0 0; color: #152b3c; overflow-wrap: anywhere; }
+.audit-observation { margin: 0; color: #1e293b; }
