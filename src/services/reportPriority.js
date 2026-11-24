@@ -1,7 +1,7 @@
 // Pure calculations: priority is ordered first by technical severity and then by citizen endorsements.
 export const severityLevels = ['Leve', 'Moderado', 'Grave', 'Crítico'];
 const severityWeight = { Leve: 1, Moderado: 2, Grave: 3, Crítico: 4 };
-const inactiveStatuses = ['resuelto', 'cerrado', 'desestimado', 'anulado', 'cancelado'];
+const inactiveStatuses = ['resuelto', 'cerrado', 'atendido', 'desestimado', 'anulado', 'cancelado'];
 
 export function isActiveReport(report) {
   return !inactiveStatuses.some((status) => (report?.status || '').toLowerCase().includes(status));

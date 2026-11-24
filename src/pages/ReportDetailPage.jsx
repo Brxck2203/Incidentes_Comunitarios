@@ -11,6 +11,7 @@ import ConfirmIncidentForm from '../components/ConfirmIncidentForm.jsx';
 import ConsolidatedEvidenceSection from '../components/ConsolidatedEvidenceSection.jsx';
 import JointAttentionPanel from '../components/JointAttentionPanel.jsx';
 import Evidence from '../components/Evidence.jsx';
+import TechnicalClosureForm from '../components/TechnicalClosureForm.jsx';
 import LocationMap from '../components/LocationMap.jsx';
 import MunicipalDecisionPanel from '../components/MunicipalDecisionPanel.jsx';
 import { subscribeToReportChanges } from '../services/reportNotifications.js';
@@ -237,6 +238,15 @@ export default function ReportDetailPage() {
     {duplicateStateCurrent && !duplicateResult.error && !duplicateResult.info.isSuspectedDuplicate && (
       <p role="status">No se encontraron posibles reportes duplicados.</p>
     )}
+    {fromReception && <TechnicalClosureForm report={report} onSaved={updated => {
+      setReport(updated); setMessage('Orden concluida y registrada como Atendido.');
+    }} />}
+    {report.technicalClosure && <section aria-label="Cierre técnico">
+      <h2>Respaldo de cierre técnico</h2>
+      <p>{report.technicalClosure.note}</p>
+      <p>Encargado: {report.technicalClosure.worker} · {formatDateTime(report.technicalClosure.at)}</p>
+      <Evidence photos={report.technicalClosure.photos || []} />
+    </section>}
     <h2>Evidencias</h2><Evidence audio={report.audio} photos={report.photos || []} />
     <ConsolidatedEvidenceSection report={report} />
     {report.confirmations?.some((confirmation) => confirmation.photos?.length > 0) && <>
