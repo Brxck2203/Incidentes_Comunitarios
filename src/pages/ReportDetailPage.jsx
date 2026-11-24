@@ -14,6 +14,7 @@ import Evidence from '../components/Evidence.jsx';
 import LocationMap from '../components/LocationMap.jsx';
 import MunicipalDecisionPanel from '../components/MunicipalDecisionPanel.jsx';
 import { subscribeToReportChanges } from '../services/reportNotifications.js';
+import { administrativeNotices } from '../services/administrativeNotices.js';
 
 function formatDateTime(value) {
   if (!value) return 'No disponible';
@@ -237,6 +238,10 @@ export default function ReportDetailPage() {
     {duplicateStateCurrent && !duplicateResult.error && !duplicateResult.info.isSuspectedDuplicate && (
       <p role="status">No se encontraron posibles reportes duplicados.</p>
     )}
+    {administrativeNotices(report, viewerId).map(notice => <section className="resolution-notices" key={notice.id} role="status">
+      <h2>{notice.title}</h2><p>{formatDateTime(notice.at)} · {notice.message}</p>
+      <Link to={notice.url}>Ver dictamen o expediente principal</Link>
+    </section>)}
     <h2>Evidencias</h2><Evidence audio={report.audio} photos={report.photos || []} />
     <ConsolidatedEvidenceSection report={report} />
     {report.confirmations?.some((confirmation) => confirmation.photos?.length > 0) && <>
