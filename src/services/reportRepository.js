@@ -1,5 +1,6 @@
 import { notifyReportChange } from './reportNotifications.js';
 import { validateCrewAssignment } from './crewAssignment.js';
+import { validateTechnicalClosure } from './technicalClosure.js';
 import { isActiveReport, severityLevels } from './reportPriority.js';
 import { nearbyMatches } from './reportDuplicates.js';
 import { applyMunicipalDecision, isSecondaryReport } from './municipalDecisions.js';
@@ -357,6 +358,8 @@ export function findPotentialDuplicates(position, category, excludeTicket = null
 // HU-15: single atomic assignment, without affecting other report records.
 export function assignReportCrew(ticket, input) {
   if (typeof ticket !== 'string' || !ticket.trim()) return Promise.reject(new Error('Ticket inválido.'));
+export function closeTechnicalOrder(ticket, input) {
+  const photos = validatePhotos(input?.photos);
   return transaction('readwrite', (store, done, fail) => {
     const request = store.get(ticket);
     request.onsuccess = () => {
@@ -370,4 +373,13 @@ export function assignReportCrew(ticket, input) {
     };
     request.onerror = () => fail('No se pudo consultar el reporte.');
   }).then((report) => { notifyReportChange({ type: 'updated', ticket }); return report; });
+        if (!request.result) throw new Error('La orden no existe.');
+        const updated = validateTechnicalClosure(request.result, { ...input, photos });
+        const write = store.put(updated);
+        write.onsuccess = () => done(updated);
+        write.onerror = () => fail('No se pudo guardar el cierre técnico.');
+      } catch (error) { fail(error); }
+    };
+    request.onerror = () => fail('No se pudo leer la orden.');
+  }).then(report => { notifyReportChange({ type: 'updated', ticket }); return report; });
 }

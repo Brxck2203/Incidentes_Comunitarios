@@ -12,6 +12,7 @@ import ConsolidatedEvidenceSection from '../components/ConsolidatedEvidenceSecti
 import JointAttentionPanel from '../components/JointAttentionPanel.jsx';
 import Evidence from '../components/Evidence.jsx';
 import CrewAssignmentForm from '../components/CrewAssignmentForm.jsx';
+import TechnicalClosureForm from '../components/TechnicalClosureForm.jsx';
 import LocationMap from '../components/LocationMap.jsx';
 import MunicipalDecisionPanel from '../components/MunicipalDecisionPanel.jsx';
 import { subscribeToReportChanges } from '../services/reportNotifications.js';
@@ -246,6 +247,14 @@ export default function ReportDetailPage() {
       <p>{report.assignment.department} · {report.assignment.crew}</p>
       <p>Fecha límite: {report.assignment.deadline}</p>
       <p>Instrucciones: {report.assignment.instructions}</p>
+    {fromReception && <TechnicalClosureForm report={report} onSaved={updated => {
+      setReport(updated); setMessage('Orden concluida y registrada como Atendido.');
+    }} />}
+    {report.technicalClosure && <section aria-label="Cierre técnico">
+      <h2>Respaldo de cierre técnico</h2>
+      <p>{report.technicalClosure.note}</p>
+      <p>Encargado: {report.technicalClosure.worker} · {formatDateTime(report.technicalClosure.at)}</p>
+      <Evidence photos={report.technicalClosure.photos || []} />
     </section>}
     <h2>Evidencias</h2><Evidence audio={report.audio} photos={report.photos || []} />
     <ConsolidatedEvidenceSection report={report} />
