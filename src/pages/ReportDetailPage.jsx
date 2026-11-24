@@ -11,6 +11,7 @@ import ConfirmIncidentForm from '../components/ConfirmIncidentForm.jsx';
 import ConsolidatedEvidenceSection from '../components/ConsolidatedEvidenceSection.jsx';
 import JointAttentionPanel from '../components/JointAttentionPanel.jsx';
 import Evidence from '../components/Evidence.jsx';
+import CrewAssignmentForm from '../components/CrewAssignmentForm.jsx';
 import TechnicalClosureForm from '../components/TechnicalClosureForm.jsx';
 import LocationMap from '../components/LocationMap.jsx';
 import MunicipalDecisionPanel from '../components/MunicipalDecisionPanel.jsx';
@@ -239,6 +240,14 @@ export default function ReportDetailPage() {
     {duplicateStateCurrent && !duplicateResult.error && !duplicateResult.info.isSuspectedDuplicate && (
       <p role="status">No se encontraron posibles reportes duplicados.</p>
     )}
+    {fromReception && <CrewAssignmentForm report={report} onSaved={(updated) => {
+      setReport(updated); setMessage('El reporte quedó asignado a la cuadrilla.');
+    }} />}
+    {report.assignment && <section aria-label="Asignación municipal">
+      <h2>Asignación de cuadrilla</h2>
+      <p>{report.assignment.department} · {report.assignment.crew}</p>
+      <p>Fecha límite: {report.assignment.deadline}</p>
+      <p>Instrucciones: {report.assignment.instructions}</p>
     {administrativeNotices(report, viewerId).map(notice => <section className="resolution-notices" key={notice.id} role="status">
       <h2>{notice.title}</h2><p>{formatDateTime(notice.at)} · {notice.message}</p>
       <Link to={notice.url}>Ver dictamen o expediente principal</Link>
