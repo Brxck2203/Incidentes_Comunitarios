@@ -11,6 +11,7 @@ import ConfirmIncidentForm from '../components/ConfirmIncidentForm.jsx';
 import ConsolidatedEvidenceSection from '../components/ConsolidatedEvidenceSection.jsx';
 import JointAttentionPanel from '../components/JointAttentionPanel.jsx';
 import Evidence from '../components/Evidence.jsx';
+import TechnicalClosureForm from '../components/TechnicalClosureForm.jsx';
 import LocationMap from '../components/LocationMap.jsx';
 import MunicipalDecisionPanel from '../components/MunicipalDecisionPanel.jsx';
 import { subscribeToReportChanges } from '../services/reportNotifications.js';
@@ -242,6 +243,15 @@ export default function ReportDetailPage() {
       <h2>{notice.title}</h2><p>{formatDateTime(notice.at)} · {notice.message}</p>
       <Link to={notice.url}>Ver dictamen o expediente principal</Link>
     </section>)}
+    {fromReception && <TechnicalClosureForm report={report} onSaved={updated => {
+      setReport(updated); setMessage('Orden concluida y registrada como Atendido.');
+    }} />}
+    {report.technicalClosure && <section aria-label="Cierre técnico">
+      <h2>Respaldo de cierre técnico</h2>
+      <p>{report.technicalClosure.note}</p>
+      <p>Encargado: {report.technicalClosure.worker} · {formatDateTime(report.technicalClosure.at)}</p>
+      <Evidence photos={report.technicalClosure.photos || []} />
+    </section>}
     <h2>Evidencias</h2><Evidence audio={report.audio} photos={report.photos || []} />
     <ConsolidatedEvidenceSection report={report} />
     {report.confirmations?.some((confirmation) => confirmation.photos?.length > 0) && <>
@@ -333,6 +343,13 @@ export default function ReportDetailPage() {
         setEditing(true); setMessage(''); setPhotoSelectionNotice(''); setPendingEdit(null);
       }}>Agregar más detalles</button>}
     </>}
+    {fromReception && <section aria-label="Bitácora de auditoría" className="selected-incident">
+      <h2>Bitácora de auditoría (solo lectura)</h2>
+      <ol>{(report.auditLog || []).map(event => <li key={event.id}>
+        {formatDateTime(event.at)} · {event.action} · {event.actor} ({event.role}) · {event.previousStatus || '—'} → {event.newStatus || '—'}
+      </li>)}</ol>
+      <p>Los movimientos se agregan automáticamente y no se pueden editar desde esta interfaz.</p>
+    </section>}
     <h2>Historial de actualizaciones</h2>
     <ol>{(report.history || []).map((entry, index) => <li key={index}>{formatDateTime(entry.at)} · {entry.action}</li>)}</ol>
   </section>;
