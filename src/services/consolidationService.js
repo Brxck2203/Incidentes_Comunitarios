@@ -1,4 +1,5 @@
 import { notifyReportChange } from './reportNotifications.js';
+import { addAudit } from './reportAudit.js';
 import { isActiveReport } from './reportPriority.js';
 import { isSecondaryReport } from './municipalDecisions.js';
 
@@ -172,7 +173,7 @@ export function applyConsolidationToRecords({
       history: [...(Array.isArray(secReport.history) ? secReport.history : []), secondaryHistoryEntry],
     };
 
-    updatedSecondaries.push(updatedSecondary);
+    updatedSecondaries.push(addAudit(secReport, updatedSecondary, { action: 'Unificación: expediente secundario', actor: validated.official, role: 'gestor', at }));
   }
 
   if (newlyConsolidatedTickets.length === 0) {
@@ -205,7 +206,7 @@ export function applyConsolidationToRecords({
   };
 
   return {
-    masterReport: updatedMaster,
+    masterReport: addAudit(masterCurrent, updatedMaster, { action: 'Unificación: expediente maestro', actor: validated.official, role: 'gestor', at }),
     secondaryReports: updatedSecondaries,
   };
 }
