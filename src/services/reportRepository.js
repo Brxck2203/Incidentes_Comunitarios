@@ -1,5 +1,6 @@
 import { notifyReportChange } from './reportNotifications.js';
 import { validateCrewAssignment } from './crewAssignment.js';
+import { addAudit, initialAudit } from './reportAudit.js';
 import { validateTechnicalClosure } from './technicalClosure.js';
 import { isActiveReport, severityLevels } from './reportPriority.js';
 import { nearbyMatches } from './reportDuplicates.js';
@@ -133,9 +134,9 @@ export async function createReport({ audio, photos, position, capturedAt, report
     category, references: '', receptionEvent: 'Nuevo reporte', reporterId, confirmations: [], severity: '',
     history: [{ at: createdAt, action: 'Reporte registrado' }],
   };
-  await transaction('readwrite', (store) => store.add(report));
+  await transaction('readwrite', (store) => store.add(initialAudit(report)));
   notifyReportChange({ type: 'created', ticket });
-  return report;
+  return initialAudit(report);
 }
 
 export function complementReport(ticket, details, photos) {
@@ -188,8 +189,9 @@ export function complementReport(ticket, details, photos) {
               : 'Información complementada' },
           ],
         };
-        const write = store.put(report);
-        write.onsuccess = () => done(report);
+        const audited = addAudit(current, report, { action: 'Información complementada', actor: current.reporterId || 'Ciudadano anónimo', role: 'ciudadano', at });
+        const write = store.put(audited);
+        write.onsuccess = () => done(audited);
       } catch (failure) {
         abort(failure);
       }
@@ -215,7 +217,8 @@ export function setReportSeverity(ticket, severity) {
         const report = { ...current, severity, updatedAt: at, receptionEvent: 'Severidad actualizada',
           history: [...(Array.isArray(current.history) ? current.history : []), { at, action: `Severidad técnica asignada: ${severity || 'Sin clasificar'}` }],
         };
-        store.put(report); done(report);
+        const audited = addAudit(current, report, { action: 'Severidad técnica actualizada', actor: 'Gestor municipal', role: 'gestor', at });
+        store.put(audited); done(audited);
       } catch (failure) {
         fail(failure);
       }
@@ -252,8 +255,9 @@ export function confirmIncident(ticket, photos, reporterId) {
             receptionEvent: 'Confirmación ciudadana',
             history: [...(Array.isArray(current.history) ? current.history : []), { at, action: 'Incidente confirmado por un vecino' }],
           };
-          store.put(updated);
-          done(updated);
+          const audited = addAudit(current, updated, { action: 'Confirmación ciudadana', actor: reporterId, role: 'ciudadano', at });
+          store.put(audited);
+          done(audited);
         };
         const hasMasterRelation = isSecondaryReport(current);
         const masterTicket = current.masterTicket
@@ -307,8 +311,9 @@ export function resolveIncident(ticket) {
           receptionEvent: 'Reporte resuelto',
           history: [...(Array.isArray(current.history) ? current.history : []), { at, action: 'Reporte marcado como resuelto' }],
         };
-        store.put(resolved);
-        done(resolved);
+        const audited = addAudit(current, resolved, { action: 'Incidente resuelto', actor: 'Gestor municipal', role: 'gestor', at });
+        store.put(audited);
+        done(audited);
       } catch (failure) {
         fail(failure);
       }
@@ -331,8 +336,10 @@ export function recordMunicipalDecision(ticket, input) {
         const current = request.result;
         if (!current) throw new Error('El reporte solicitado no existe.');
         const result = applyMunicipalDecision(current, input);
-        if (result.changed) store.put(result.report);
-        done(result);
+        if (result.changed) {
+          const audited = addAudit(current, result.report, { action: 'Decisión municipal', actor: input.responsible, role: 'gestor', at: result.report.updatedAt });
+          store.put(audited); done({ ...result, report: audited });
+        } else done(result);
       } catch (failure) {
         abort(failure);
       }
