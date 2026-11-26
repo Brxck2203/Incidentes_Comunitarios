@@ -1,4 +1,7 @@
 import { notifyReportChange } from './reportNotifications.js';
+import { validateCrewAssignment } from './crewAssignment.js';
+import { addAudit, initialAudit } from './reportAudit.js';
+import { validateTechnicalClosure } from './technicalClosure.js';
 import { isActiveReport, severityLevels } from './reportPriority.js';
 import { nearbyMatches } from './reportDuplicates.js';
 import { applyMunicipalDecision, isSecondaryReport } from './municipalDecisions.js';
@@ -131,9 +134,9 @@ export async function createReport({ audio, photos, position, capturedAt, report
     category, references: '', receptionEvent: 'Nuevo reporte', reporterId, confirmations: [], severity: '',
     history: [{ at: createdAt, action: 'Reporte registrado' }],
   };
-  await transaction('readwrite', (store) => store.add(report));
+  await transaction('readwrite', (store) => store.add(initialAudit(report)));
   notifyReportChange({ type: 'created', ticket });
-  return report;
+  return initialAudit(report);
 }
 
 export function complementReport(ticket, details, photos) {
@@ -186,8 +189,9 @@ export function complementReport(ticket, details, photos) {
               : 'Información complementada' },
           ],
         };
-        const write = store.put(report);
-        write.onsuccess = () => done(report);
+        const audited = addAudit(current, report, { action: 'Información complementada', actor: current.reporterId || 'Ciudadano anónimo', role: 'ciudadano', at });
+        const write = store.put(audited);
+        write.onsuccess = () => done(audited);
       } catch (failure) {
         abort(failure);
       }
@@ -213,7 +217,8 @@ export function setReportSeverity(ticket, severity) {
         const report = { ...current, severity, updatedAt: at, receptionEvent: 'Severidad actualizada',
           history: [...(Array.isArray(current.history) ? current.history : []), { at, action: `Severidad técnica asignada: ${severity || 'Sin clasificar'}` }],
         };
-        store.put(report); done(report);
+        const audited = addAudit(current, report, { action: 'Severidad técnica actualizada', actor: 'Gestor municipal', role: 'gestor', at });
+        store.put(audited); done(audited);
       } catch (failure) {
         fail(failure);
       }
@@ -250,8 +255,9 @@ export function confirmIncident(ticket, photos, reporterId) {
             receptionEvent: 'Confirmación ciudadana',
             history: [...(Array.isArray(current.history) ? current.history : []), { at, action: 'Incidente confirmado por un vecino' }],
           };
-          store.put(updated);
-          done(updated);
+          const audited = addAudit(current, updated, { action: 'Confirmación ciudadana', actor: reporterId, role: 'ciudadano', at });
+          store.put(audited);
+          done(audited);
         };
         const hasMasterRelation = isSecondaryReport(current);
         const masterTicket = current.masterTicket
@@ -305,8 +311,9 @@ export function resolveIncident(ticket) {
           receptionEvent: 'Reporte resuelto',
           history: [...(Array.isArray(current.history) ? current.history : []), { at, action: 'Reporte marcado como resuelto' }],
         };
-        store.put(resolved);
-        done(resolved);
+        const audited = addAudit(current, resolved, { action: 'Incidente resuelto', actor: 'Gestor municipal', role: 'gestor', at });
+        store.put(audited);
+        done(audited);
       } catch (failure) {
         fail(failure);
       }
@@ -329,8 +336,10 @@ export function recordMunicipalDecision(ticket, input) {
         const current = request.result;
         if (!current) throw new Error('El reporte solicitado no existe.');
         const result = applyMunicipalDecision(current, input);
-        if (result.changed) store.put(result.report);
-        done(result);
+        if (result.changed) {
+          const audited = addAudit(current, result.report, { action: 'Decisión municipal', actor: input.responsible, role: 'gestor', at: result.report.updatedAt });
+          store.put(audited); done({ ...result, report: audited });
+        } else done(result);
       } catch (failure) {
         abort(failure);
       }
@@ -351,4 +360,39 @@ export function findPotentialDuplicates(position, category, excludeTicket = null
     const request = store.index('category').getAll(category);
     request.onsuccess = () => done(nearbyMatches(request.result, position, category, excludeTicket));
   });
+}
+
+// HU-15: single atomic assignment, without affecting other report records.
+export function assignReportCrew(ticket, input) {
+  if (typeof ticket !== 'string' || !ticket.trim()) return Promise.reject(new Error('Ticket inválido.'));
+  return transaction('readwrite', (store, done, fail) => {
+    const request = store.get(ticket);
+    request.onsuccess = () => {
+      try {
+        if (!request.result) throw new Error('El reporte no existe.');
+        const updated = validateCrewAssignment(request.result, input);
+        const write = store.put(updated);
+        write.onsuccess = () => done(updated);
+        write.onerror = () => fail('No se pudo guardar la asignación.');
+      } catch (error) { fail(error); }
+    };
+    request.onerror = () => fail('No se pudo consultar el reporte.');
+  }).then((report) => { notifyReportChange({ type: 'updated', ticket }); return report; });
+}
+
+export function closeTechnicalOrder(ticket, input) {
+  const photos = validatePhotos(input?.photos);
+  return transaction('readwrite', (store, done, fail) => {
+    const request = store.get(ticket);
+    request.onsuccess = () => {
+      try {
+        if (!request.result) throw new Error('La orden no existe.');
+        const updated = validateTechnicalClosure(request.result, { ...input, photos });
+        const write = store.put(updated);
+        write.onsuccess = () => done(updated);
+        write.onerror = () => fail('No se pudo guardar el cierre técnico.');
+      } catch (error) { fail(error); }
+    };
+    request.onerror = () => fail('No se pudo leer la orden.');
+  }).then(report => { notifyReportChange({ type: 'updated', ticket }); return report; });
 }

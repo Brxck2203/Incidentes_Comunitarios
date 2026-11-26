@@ -14,6 +14,7 @@ import IncidentMap from '../components/IncidentMap.jsx';
 import MunicipalIncidentMap from '../components/MunicipalIncidentMap.jsx';
 import MunicipalConsoleFilters from '../components/MunicipalConsoleFilters.jsx';
 import { subscribeToReportChanges } from '../services/reportNotifications.js';
+import { administrativeNotices } from '../services/administrativeNotices.js';
 
 const severityStyle = { Leve: 'mild', Moderado: 'moderate', Grave: 'serious', Crítico: 'critical' };
 
@@ -152,6 +153,7 @@ export default function ReportsPage({ reception = false }) {
   }, [reception, selectedTicket]);
   const confirmedByMe = (report) => Boolean(reporterId && report.confirmations?.some((item) => item.reporterId === reporterId));
   const subscriptions = reception ? [] : reports.filter(confirmedByMe);
+  const adminNotices = reception ? [] : reports.flatMap(report => administrativeNotices(report, reporterId));
   const resolvedNotifications = subscriptions.filter((report) => !trackingMap[report.ticket]?.masterUnavailable
     && !isActiveReport({ ...report, status: trackingMap[report.ticket]?.effectiveStatus ?? report.status }));
 
@@ -213,6 +215,13 @@ export default function ReportsPage({ reception = false }) {
       {subscriptions.length > 0 && <section aria-label="Reportes que sigo">
         <h2>Reportes que sigo</h2>
         <ul>{subscriptions.map((report) => <li key={report.ticket}><Link to={`/reportes/${report.ticket}`}>{report.ticket}</Link> · {municipalStatusLabel(report, trackingMap)}</li>)}</ul>
+      </section>}
+      {adminNotices.length > 0 && <section aria-label="Avisos administrativos" className="resolution-notices" role="status">
+        <h2>Avisos administrativos</h2>
+        <ul>{adminNotices.map(notice => <li key={notice.id}>
+          <strong>{notice.title}</strong> · {formatDateTime(notice.at)} · {notice.message}{' '}
+          <Link to={notice.url}>Consultar expediente {notice.ticket}</Link>
+        </li>)}</ul>
       </section>}
       {resolvedNotifications.length > 0 && <section className="resolution-notices" aria-label="Notificaciones de resolución" role="status">
         <h2>Notificaciones de resolución</h2>
