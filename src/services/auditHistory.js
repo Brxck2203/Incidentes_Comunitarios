@@ -1,4 +1,5 @@
-// TODO: consumir campos nativos de HU-21 cuando se integre el registro automático de auditoría general
+// Integrado con report.auditLog (HU-21) y enriquecido con report.history para cubrir
+// detalles técnicos, causales, asignaciones (HU-15) y cierres técnicos (HU-18).
 
 const INITIAL_STATUS = 'Registrado / Recibido';
 
@@ -69,7 +70,7 @@ function inferStatusTransition(entry, currentStatus) {
       stateChanged: (currentStatus || '') !== next,
     };
   }
-  if (lower.includes('marcado como atendido') || lower.includes('cierre técnico') || lower.includes('cierre tecnico')) {
+  if (lower.includes('marcado como atendido') || lower.includes('cierre técnico') || lower.includes('cierre tecnico') || lower.includes('orden concluida')) {
     const next = 'Atendido';
     return {
       previousStatus: currentStatus || 'En atención',
@@ -111,7 +112,10 @@ function inferStatusTransition(entry, currentStatus) {
 }
 
 function inferActorAndRole(entry, report) {
-  const explicitActor =
+  const rawRole = (typeof entry.role === 'string' && entry.role.trim()) || '';
+  const isCitizenRole = rawRole.toLocaleLowerCase() === 'ciudadano';
+
+  const rawActor =
     (typeof entry.responsible === 'string' && entry.responsible.trim()) ||
     (typeof entry.official === 'string' && entry.official.trim()) ||
     (typeof entry.actor === 'string' && entry.actor.trim()) ||
@@ -119,11 +123,23 @@ function inferActorAndRole(entry, report) {
     (typeof entry.newCrew === 'string' && entry.newCrew.trim()) ||
     '';
 
-  const explicitRole =
-    (typeof entry.role === 'string' && entry.role.trim()) || '';
-
   const action = typeof entry.action === 'string' ? entry.action.trim() : '';
   const lower = action.toLocaleLowerCase();
+
+  // Si HU-21 guardó el UUID local del ciudadano como actor en role === 'ciudadano', mostrar etiqueta legible sin exponer UUID
+  if (isCitizenRole) {
+    const isNeighbor = lower.includes('confirmación ciudadana') || lower.includes('confirmado por un vecino') || lower.includes('respaldo');
+    const cleanActor = !rawActor || rawActor === report?.reporterId || /^[0-9a-f-]{16,}$/i.test(rawActor) || rawActor === 'Ciudadano anónimo'
+      ? (isNeighbor ? 'Vecino participante' : 'Ciudadano reportante')
+      : rawActor;
+    return {
+      actor: cleanActor,
+      role: 'Ciudadano',
+    };
+  }
+
+  const explicitActor = rawActor;
+  const explicitRole = rawRole;
 
   if (explicitActor) {
     let role = explicitRole;
@@ -250,6 +266,51 @@ function inferEventAndObservation(entry) {
 }
 
 /**
+ * Concilia las entradas de `report.history` y `report.auditLog` (HU-21) para no duplicar eventos
+ * ocurridos en el mismo instante ni perder movimientos que solo se hayan escrito en una de las dos listas.
+ */
+function mergeAuditAndHistoryEntries(report) {
+  const historyList = Array.isArray(report.history) ? report.history.filter(Boolean) : [];
+  const auditList = Array.isArray(report.auditLog) ? report.auditLog.filter(Boolean) : [];
+
+  if (!auditList.length) return historyList;
+  if (!historyList.length) return auditList;
+
+  const usedAuditIndices = new Set();
+  const merged = [];
+
+  for (const hEntry of historyList) {
+    const matchIndex = auditList.findIndex(
+      (aEntry, idx) => !usedAuditIndices.has(idx) && aEntry.at && hEntry.at && aEntry.at === hEntry.at,
+    );
+    if (matchIndex >= 0) {
+      usedAuditIndices.add(matchIndex);
+      const aEntry = auditList[matchIndex];
+      merged.push({
+        ...aEntry,
+        ...hEntry,
+        // Conservar action más descriptiva de history pero respaldar actor, role y estados de auditLog
+        action: hEntry.action || aEntry.action,
+        actor: hEntry.responsible || hEntry.official || aEntry.actor,
+        role: hEntry.role || aEntry.role,
+        previousStatus: hEntry.previousStatus || aEntry.previousStatus,
+        newStatus: hEntry.newStatus || aEntry.newStatus,
+      });
+    } else {
+      merged.push(hEntry);
+    }
+  }
+
+  for (let idx = 0; idx < auditList.length; idx += 1) {
+    if (!usedAuditIndices.has(idx)) {
+      merged.push(auditList[idx]);
+    }
+  }
+
+  return merged;
+}
+
+/**
  * Construye el listado cronológico completo e inmutable de movimientos de auditoría de un expediente (HU-22 / RF-13).
  */
 export function buildAuditHistory(report) {
@@ -257,13 +318,30 @@ export function buildAuditHistory(report) {
     return Object.freeze([]);
   }
 
-  const rawEntries = Array.isArray(report.auditLog) && report.auditLog.length > 0
-    ? report.auditLog
-    : (Array.isArray(report.history) ? report.history : []);
+  const rawEntries = mergeAuditAndHistoryEntries(report);
 
   const indexed = rawEntries
     .filter((entry) => entry && typeof entry === 'object')
-    .map((entry, originalIndex) => ({ entry, originalIndex }));
+    .map((entry, originalIndex) => {
+      // Si el cierre técnico tiene nota en report.technicalClosure y la entrada es la orden concluida, adjuntarla como observación
+      if (
+        report.technicalClosure?.note &&
+        typeof entry.action === 'string' &&
+        entry.action.toLocaleLowerCase().includes('orden concluida') &&
+        !entry.technicalNote &&
+        !entry.observation
+      ) {
+        return {
+          entry: {
+            ...entry,
+            role: entry.role || 'Cuadrilla municipal',
+            technicalNote: report.technicalClosure.note,
+          },
+          originalIndex,
+        };
+      }
+      return { entry, originalIndex };
+    });
 
   // Ordenar en orden cronológico ascendente (desde recepción hasta cierre), preservando el orden de inserción ante empates
   indexed.sort((a, b) => {

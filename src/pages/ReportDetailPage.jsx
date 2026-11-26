@@ -385,13 +385,6 @@ export default function ReportDetailPage() {
         setEditing(true); setMessage(''); setPhotoSelectionNotice(''); setPendingEdit(null);
       }}>Agregar más detalles</button>}
     </>}
-    {fromReception && <section aria-label="Bitácora de auditoría" className="selected-incident">
-      <h2>Bitácora de auditoría (solo lectura)</h2>
-      <ol>{(report.auditLog || []).map(event => <li key={event.id}>
-        {formatDateTime(event.at)} · {event.action} · {event.actor} ({event.role}) · {event.previousStatus || '—'} → {event.newStatus || '—'}
-      </li>)}</ol>
-      <p>Los movimientos se agregan automáticamente y no se pueden editar desde esta interfaz.</p>
-    </section>}
     <h2>Historial de actualizaciones</h2>
     <ol>{(report.history || []).map((entry, index) => <li key={index}>{formatDateTime(entry.at)} · {entry.action}</li>)}</ol>
       </div>

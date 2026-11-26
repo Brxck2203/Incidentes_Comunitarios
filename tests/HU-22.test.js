@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  assignReportCrew,
+  closeTechnicalOrder,
   complementReport,
   createReport,
   getReport,
   recordMunicipalDecision,
-  resolveIncident,
   setReportSeverity,
 } from '../src/services/reportRepository.js';
 import { buildAuditHistory } from '../src/services/auditHistory.js';
@@ -13,7 +14,7 @@ import { mockIndexedDB, original } from './helpers/mockIndexedDB.js';
 
 const photo = () => new Blob(['foto'], { type: 'image/png' });
 
-test('HU-22: el historial de auditoría lista en orden cronológico completo todos los movimientos desde la recepción hasta el cierre sin permitir mutación', async () => {
+test('HU-22: el historial de auditoría concilia auditLog (HU-21) y history (HU-15/HU-18) listando en orden cronológico todos los movimientos hasta el cierre', async () => {
   mockIndexedDB([original], 2);
 
   const created = await createReport({
@@ -49,12 +50,24 @@ test('HU-22: el historial de auditoría lista en orden cronológico completo tod
     responsible: 'Jefa Técnica María Solano',
   });
 
-  await resolveIncident(created.ticket);
+  await assignReportCrew(created.ticket, {
+    department: 'Red Vial',
+    crew: 'Cuadrilla de bacheo',
+    instructions: 'Compactar asfalto',
+    deadline: '2027-01-20',
+    responsible: 'Coordinador Vial',
+  });
+
+  await closeTechnicalOrder(created.ticket, {
+    worker: 'Jefe de Cuadrilla Pedro Mora',
+    note: 'Bache reparado en su totalidad.',
+    photos: [photo()],
+  });
 
   const stored = await getReport(created.ticket);
   const auditTrail = buildAuditHistory(stored);
 
-  assert.equal(auditTrail.length, 6);
+  assert.equal(auditTrail.length, 7);
   assert.equal(auditTrail[0].newStatus, 'Registrado / Recibido');
   assert.equal(auditTrail[0].actor, 'Ciudadano reportante');
 
@@ -66,8 +79,14 @@ test('HU-22: el historial de auditoría lista en orden cronológico completo tod
   assert.equal(auditTrail[4].previousStatus, 'En evaluación');
   assert.equal(auditTrail[4].newStatus, 'Admitido a trámite');
 
+  assert.equal(auditTrail[5].actor, 'Coordinador Vial');
   assert.equal(auditTrail[5].previousStatus, 'Admitido a trámite');
-  assert.equal(auditTrail[5].newStatus, 'Resuelto');
+  assert.equal(auditTrail[5].newStatus, 'Asignado');
+
+  assert.equal(auditTrail[6].actor, 'Jefe de Cuadrilla Pedro Mora');
+  assert.equal(auditTrail[6].previousStatus, 'Asignado');
+  assert.equal(auditTrail[6].newStatus, 'Atendido');
+  assert.match(auditTrail[6].observation, /Bache reparado en su totalidad/);
 
   // Verificar inmutabilidad del resultado de auditoría (RF-13)
   assert.throws(() => {
