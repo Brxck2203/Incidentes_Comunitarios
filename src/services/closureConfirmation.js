@@ -1,19 +1,13 @@
+import { municipalCrews } from './crewAssignment.js';
 import { isSecondaryReport } from './municipalDecisions.js';
+import { addAudit } from './reportAudit.js';
 import { notifyReportChange } from './reportNotifications.js';
 
-// TODO: consumir estructura de cierre técnico de HU-18 cuando se integre
 // TODO: integrar acción Reportar inconformidad / persistencia cuando se integre HU-26
 
 export const DEFAULT_CLOSURE_CONFIRMATION_HOURS = 72;
 export const ATTENDED_STATUS = 'Atendido';
 export const ARCHIVED_CLOSURE_STATUS = 'Cerrado / Archivado';
-
-const DEPARTMENT_BY_CATEGORY = {
-  'Baches': 'Red Vial',
-  'Basura clandestina': 'Gestión Ambiental',
-  'Ramas/arbolado': 'Parques y Ornato',
-  'Aceras dañadas': 'Mantenimiento de Infraestructura',
-};
 
 function openDatabase() {
   return new Promise((resolve, reject) => {
@@ -79,6 +73,7 @@ export function extractClosureCertificate(report, options = {}) {
   const closedAt =
     rawClosure.closedAt ||
     rawClosure.attendedAt ||
+    rawClosure.at ||
     report.attendedAt ||
     report.resolvedAt ||
     report.updatedAt ||
@@ -95,13 +90,18 @@ export function extractClosureCertificate(report, options = {}) {
   const department =
     (typeof rawClosure.department === 'string' && rawClosure.department.trim()) ||
     (typeof report.assignment?.department === 'string' && report.assignment.department.trim()) ||
-    DEPARTMENT_BY_CATEGORY[report.category] ||
+    municipalCrews[report.category]?.department ||
     'Dependencia municipal de atención';
 
   const crewName =
     (typeof rawClosure.crewName === 'string' && rawClosure.crewName.trim()) ||
+    (typeof rawClosure.crew === 'string' && rawClosure.crew.trim()) ||
     (typeof report.assignment?.crewName === 'string' && report.assignment.crewName.trim()) ||
+    (typeof report.assignment?.crew === 'string' && report.assignment.crew.trim()) ||
     '';
+
+  const worker =
+    (typeof rawClosure.worker === 'string' && rawClosure.worker.trim()) || '';
 
   const technicalNote =
     (typeof rawClosure.technicalNote === 'string' && rawClosure.technicalNote.trim()) ||
@@ -142,6 +142,7 @@ export function extractClosureCertificate(report, options = {}) {
     closedAt,
     department,
     crewName,
+    worker,
     technicalNote,
     photos: rawPhotos,
     hasClosurePhoto: rawPhotos.length > 0,
@@ -194,7 +195,7 @@ export function applySolutionConfirmation(report, options = {}) {
     action: 'Solución confirmada por el ciudadano; expediente archivado definitivamente.',
   };
 
-  return {
+  const nextReport = {
     ...report,
     status: ARCHIVED_CLOSURE_STATUS,
     closureArchived: true,
@@ -203,6 +204,13 @@ export function applySolutionConfirmation(report, options = {}) {
     receptionEvent: 'Solución confirmada y expediente archivado',
     history: [...previousHistory, historyEntry],
   };
+
+  return addAudit(report, nextReport, {
+    action: 'Solución confirmada y expediente archivado',
+    actor: report.reporterId || 'Ciudadano reportante',
+    role: 'ciudadano',
+    at,
+  });
 }
 
 /**

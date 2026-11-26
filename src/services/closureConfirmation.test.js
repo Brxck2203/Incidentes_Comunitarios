@@ -7,41 +7,75 @@ import {
   applySolutionConfirmation,
   extractClosureCertificate,
 } from './closureConfirmation.js';
+import { validateCrewAssignment } from './crewAssignment.js';
 import { isActiveReport } from './reportPriority.js';
+import { validateTechnicalClosure } from './technicalClosure.js';
 
 function createAttendedReport(overrides = {}) {
-  return {
+  const base = {
     ticket: 'RC-950',
     createdAt: '2026-11-15T08:00:00.000Z',
-    updatedAt: '2026-11-18T14:00:00.000Z',
-    status: ATTENDED_STATUS,
+    updatedAt: '2026-11-16T08:00:00.000Z',
+    status: 'Admitido a trámite',
     category: 'Baches',
-    closure: {
-      closedAt: '2026-11-18T14:00:00.000Z',
-      department: 'Red Vial',
-      crewName: 'Cuadrilla de Bacheo y Asfalto',
-      technicalNote: 'Se aplicó carpeta asfáltica y compactación mecánica.',
-      photos: [{ size: 2048, type: 'image/jpeg', id: 'final-photo-1' }],
-    },
+    reporterId: 'ciudadano-demo-950',
+    auditLog: [
+      {
+        id: 'RC-950:1',
+        at: '2026-11-15T08:00:00.000Z',
+        action: 'Reporte registrado',
+        actor: 'ciudadano-demo-950',
+        role: 'ciudadano',
+        previousStatus: '',
+        newStatus: 'Registrado / Recibido',
+      },
+    ],
     history: [
       { at: '2026-11-15T08:00:00.000Z', action: 'Reporte registrado' },
-      { at: '2026-11-18T14:00:00.000Z', action: 'Cierre técnico del incidente registrado' },
     ],
+  };
+
+  const assigned = validateCrewAssignment(
+    base,
+    {
+      department: 'Red Vial',
+      crew: 'Cuadrilla de bacheo',
+      instructions: 'Aplicar carpeta asfáltica caliente.',
+      deadline: '2026-11-25',
+      responsible: 'Laura Gestora',
+    },
+    '2026-11-17T09:00:00.000Z',
+  );
+
+  const closed = validateTechnicalClosure(
+    assigned,
+    {
+      worker: 'Carlos Jefe de Cuadrilla',
+      note: 'Se aplicó carpeta asfáltica y compactación mecánica.',
+      photos: [{ size: 2048, type: 'image/jpeg', id: 'final-photo-1' }],
+    },
+    '2026-11-18T14:00:00.000Z',
+  );
+
+  return {
+    ...closed,
     ...overrides,
   };
 }
 
-test('extractClosureCertificate genera la constancia oficial con fecha de cierre, dependencia, nota técnica, foto final y plazo configurable', () => {
+test('extractClosureCertificate genera la constancia oficial desde el cierre técnico de HU-18 y la asignación de HU-15', () => {
   const report = createAttendedReport();
   const cert = extractClosureCertificate(report, {
     now: '2026-11-19T14:00:00.000Z', // 24 horas después del cierre
   });
 
   assert.ok(cert);
+  assert.equal(report.status, ATTENDED_STATUS);
   assert.equal(cert.ticket, 'RC-950');
   assert.equal(cert.closedAt, '2026-11-18T14:00:00.000Z');
   assert.equal(cert.department, 'Red Vial');
-  assert.equal(cert.crewName, 'Cuadrilla de Bacheo y Asfalto');
+  assert.equal(cert.crewName, 'Cuadrilla de bacheo');
+  assert.equal(cert.worker, 'Carlos Jefe de Cuadrilla');
   assert.match(cert.technicalNote, /carpeta asfáltica/);
   assert.equal(cert.hasClosurePhoto, true);
   assert.equal(cert.photos.length, 1);
@@ -88,6 +122,15 @@ test('applySolutionConfirmation archiva definitivamente el expediente dentro del
   assert.equal(archived.history.length, report.history.length + 1);
   assert.deepEqual(archived.history.slice(0, report.history.length), report.history);
   assert.match(archived.history.at(-1).action, /Solución confirmada por el ciudadano/);
+  assert.equal(archived.auditLog.length, report.auditLog.length + 1);
+  assert.equal(archived.auditLog.at(-1).previousStatus, ATTENDED_STATUS);
+  assert.equal(archived.auditLog.at(-1).newStatus, ARCHIVED_CLOSURE_STATUS);
+
+  // La fecha original del cierre técnico se conserva intacta tras confirmar solución
+  const archivedCert = extractClosureCertificate(archived, { now: confirmTime });
+  assert.equal(archivedCert.closedAt, '2026-11-18T14:00:00.000Z');
+  assert.equal(archivedCert.isConfirmedByCitizen, true);
+  assert.equal(archivedCert.canConfirmSolution, false);
 });
 
 test('applySolutionConfirmation rechaza confirmar si el plazo configurado venció, si ya estaba archivado o si el reporte sigue abierto', () => {

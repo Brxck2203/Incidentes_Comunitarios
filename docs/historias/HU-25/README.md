@@ -7,7 +7,7 @@
 - Requerimiento: RF-15.
 - Estimación del documento: por confirmar.
 - Rama: feature/hu-25-confirmacion-cierre-ciudadano.
-- Base: main, commit be9145cf176e4712726cadc3ed17e8ee0e1d795e.
+- Base: main, commit 929589f (actualizada con HU-15, HU-18, HU-21 y HU-24).
 
 ## Objetivo
 
@@ -23,22 +23,23 @@ Poner a disposición del ciudadano la constancia oficial de cierre cuando su inc
 
 ## Base y coordinación
 
-- HU-18 (RF-11): encargada del formulario de cierre técnico por cuadrilla con foto final, nota técnica y paso a «Atendido». Mientras HU-18 no esté integrada en `main`, `src/services/closureConfirmation.js` consume `report.closure` / `report.technicalClosure` / `report.closureCertificate` si existen y soporta también los cierres creados con `resolveIncident` (`status: 'Resuelto'`, `resolvedAt`), marcado con `TODO: consumir estructura de cierre técnico de HU-18 cuando se integre`.
+- HU-15 (RF-10) y HU-18 (RF-11): `src/services/closureConfirmation.js` consume directamente el catálogo `municipalCrews` y `report.assignment` de HU-15 (`department`, `crew`) junto con `report.technicalClosure` de HU-18 (`at`, `note`, `photos`, `worker`), manteniendo compatibilidad con cierres heredados (`resolveIncident`).
+- HU-21 (RF-13): al confirmar la solución ciudadana (`applySolutionConfirmation`), además de la entrada en `history`, se registra automáticamente el movimiento en `auditLog` mediante `addAudit`.
 - HU-26 (RF-15): la opción «Reportar inconformidad / persistencia» corresponde a HU-26 y no se implementa aquí (`TODO: integrar acción Reportar inconformidad / persistencia cuando se integre HU-26`).
-- HU-23 / HU-24 (RF-14): las notificaciones automáticas externas pertenecen a esas historias; en este prototipo local sin backend ni servidor de correo, la entrega de la constancia se realiza directamente en la vista de seguimiento del ticket (`/reportes/:ticket`).
+- HU-23 / HU-24 (RF-14): las notificaciones automáticas externas pertenecen a esas historias; en este prototipo local sin backend ni servidor de correo, la entrega de la constancia se realiza directamente en la vista de seguimiento del ticket (`/reportes/:ticket`), incluyendo expedientes secundarios consolidados cuyo caso maestro haya sido atendido.
 - `src/pages/ReportDetailPage.jsx`: punto de integración de `ClosureCertificatePanel.jsx`.
 
 ## Validación técnica propuesta y resultados reales
 
-- Generar la constancia digital al marcarse un reporte como «Atendido» (y «Resuelto») con fecha de cierre, dependencia, nota técnica y foto final, así como el aviso explícito cuando la foto final está ausente: **verificado** (`src/services/closureConfirmation.test.js` y `tests/HU-25.test.js`).
-- Confirmar la solución dentro del plazo configurable (72 horas por defecto y plazos personalizados) y verificar el paso a «Cerrado / Archivado», `closureArchived: true` y la nueva entrada al final de `history`: **verificado**.
+- Generar la constancia digital al marcarse un reporte como «Atendido» mediante `closeTechnicalOrder` (y «Resuelto») con fecha de cierre, dependencia, cuadrilla, nota técnica y foto final, así como el aviso explícito cuando la foto final está ausente: **verificado** (`src/services/closureConfirmation.test.js` y `tests/HU-25.test.js`).
+- Confirmar la solución dentro del plazo configurable (72 horas por defecto y plazos personalizados) y verificar el paso a «Cerrado / Archivado», `closureArchived: true`, la nueva entrada en `history` y el registro en `auditLog`: **verificado**.
 - Comprobar rechazo cuando el plazo configurado ya expiró, cuando el expediente ya estaba archivado o cuando aún se encuentra abierto: **verificado**.
 - Resultados ejecutados localmente:
-  - `npm test`: **16/16 pruebas aprobadas** (`tests/HU-25.test.js` incluido).
+  - `npm test`: **23/23 pruebas aprobadas** (`tests/HU-25.test.js` incluido).
   - `node --test src/services/*.test.js`: **28/28 pruebas aprobadas** (`src/services/closureConfirmation.test.js` incluido).
   - `npm run lint` (`oxlint`): **0 errores**.
-  - `npm run build` (`vite build`): **Compilación exitosa** (`59 modules transformed`).
-- Pendiente de validación manual visual en móvil y de integración futura con **HU-18** y **HU-26**.
+  - `npm run build` (`vite build`): **Compilación exitosa**.
+- Pendiente de validación manual visual en móvil y de integración futura con **HU-26**.
 
 ## Límites e integración
 

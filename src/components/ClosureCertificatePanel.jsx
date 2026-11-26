@@ -69,6 +69,12 @@ export default function ClosureCertificatePanel({
             {certificate.crewName ? ` (${certificate.crewName})` : ''}
           </dd>
         </div>
+        {municipalView && certificate.worker && (
+          <div>
+            <dt>Encargado de cuadrilla</dt>
+            <dd>{certificate.worker}</dd>
+          </div>
+        )}
         <div>
           <dt>Plazo de validación ciudadana</dt>
           <dd>

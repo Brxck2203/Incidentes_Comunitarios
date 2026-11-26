@@ -217,7 +217,15 @@ export default function ReportDetailPage() {
     <ClosureCertificatePanel
       key={`closure-${report.ticket}-${reportStatus}`}
       report={tracking?.isConsolidatedSecondary && !tracking?.masterUnavailable
-        ? { ...report, status: tracking.effectiveStatus, updatedAt: tracking.effectiveUpdatedAt }
+        ? {
+            ...report,
+            status: tracking.effectiveStatus,
+            updatedAt: tracking.effectiveUpdatedAt,
+            category: tracking.effectiveCategory || report.category,
+            technicalClosure: tracking.effectiveClosure || report.technicalClosure,
+            closureArchived: tracking.effectiveClosureArchived ?? report.closureArchived,
+            solutionConfirmedAt: tracking.effectiveSolutionConfirmedAt ?? report.solutionConfirmedAt,
+          }
         : report}
       municipalView={fromReception}
       onConfirmed={(updated) => {
@@ -225,7 +233,13 @@ export default function ReportDetailPage() {
           setReport(updated);
         }
         setTracking((current) => current
-          ? { ...current, effectiveStatus: updated.status, effectiveUpdatedAt: updated.updatedAt }
+          ? {
+              ...current,
+              effectiveStatus: updated.status,
+              effectiveUpdatedAt: updated.updatedAt,
+              effectiveClosureArchived: Boolean(updated.closureArchived),
+              effectiveSolutionConfirmedAt: updated.solutionConfirmedAt || null,
+            }
           : current);
       }}
     />
@@ -272,12 +286,6 @@ export default function ReportDetailPage() {
     {fromReception && <TechnicalClosureForm report={report} onSaved={updated => {
       setReport(updated); setMessage('Orden concluida y registrada como Atendido.');
     }} />}
-    {report.technicalClosure && <section aria-label="Cierre técnico">
-      <h2>Respaldo de cierre técnico</h2>
-      <p>{report.technicalClosure.note}</p>
-      <p>Encargado: {report.technicalClosure.worker} · {formatDateTime(report.technicalClosure.at)}</p>
-      <Evidence photos={report.technicalClosure.photos || []} />
-    </section>}
     <h2>Evidencias</h2><Evidence audio={report.audio} photos={report.photos || []} />
     <ConsolidatedEvidenceSection report={report} />
     {report.confirmations?.some((confirmation) => confirmation.photos?.length > 0) && <>
