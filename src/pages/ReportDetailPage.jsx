@@ -248,6 +248,7 @@ export default function ReportDetailPage() {
       <p>{report.assignment.department} · {report.assignment.crew}</p>
       <p>Fecha límite: {report.assignment.deadline}</p>
       <p>Instrucciones: {report.assignment.instructions}</p>
+    </section>}
     {administrativeNotices(report, viewerId).map(notice => <section className="resolution-notices" key={notice.id} role="status">
       <h2>{notice.title}</h2><p>{formatDateTime(notice.at)} · {notice.message}</p>
       <Link to={notice.url}>Ver dictamen o expediente principal</Link>
