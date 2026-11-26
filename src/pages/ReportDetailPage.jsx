@@ -256,7 +256,7 @@ export default function ReportDetailPage() {
     {fromReception && <CrewAssignmentForm report={report} onSaved={(updated) => {
       setReport(updated); setMessage('El reporte quedó asignado a la cuadrilla.');
     }} />}
-    {report.assignment && <section aria-label="Asignación municipal">
+    {!fromReception && report.assignment && <section aria-label="Asignación municipal">
       <h2>Asignación de cuadrilla</h2>
       <p>{report.assignment.department} · {report.assignment.crew}</p>
       <p>Fecha límite: {report.assignment.deadline}</p>

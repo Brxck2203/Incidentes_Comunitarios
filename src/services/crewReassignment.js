@@ -1,61 +1,33 @@
 import { DEFAULT_OFFICIAL_NAME } from './consolidationService.js';
+import { municipalCrews } from './crewAssignment.js';
 import { isSecondaryReport } from './municipalDecisions.js';
+import { addAudit } from './reportAudit.js';
 import { notifyReportChange } from './reportNotifications.js';
 import { isActiveReport } from './reportPriority.js';
 
-// TODO: reemplazar cuando se integre HU-15 (catálogo y asignación inicial de cuadrillas de RF-10)
 export const ASSIGNED_STATUS = 'Asignado';
 
-export const MUNICIPAL_CREW_CATALOG = [
-  {
-    crewId: 'rv-bacheo',
-    crewName: 'Cuadrilla de Bacheo y Asfalto',
-    department: 'Red Vial',
-    category: 'Baches',
-  },
-  {
-    crewId: 'rv-vialidad',
-    crewName: 'Cuadrilla de Mantenimiento Vial',
-    department: 'Red Vial',
-    category: 'Baches',
-  },
-  {
-    crewId: 'ga-recoleccion',
-    crewName: 'Cuadrilla de Limpieza y Recolección',
-    department: 'Gestión Ambiental',
-    category: 'Basura clandestina',
-  },
-  {
-    crewId: 'ga-saneamiento',
-    crewName: 'Cuadrilla de Saneamiento Ambiental',
-    department: 'Gestión Ambiental',
-    category: 'Basura clandestina',
-  },
-  {
-    crewId: 'po-arbolado',
-    crewName: 'Cuadrilla de Poda y Arbolado',
-    department: 'Parques y Ornato',
-    category: 'Ramas/arbolado',
-  },
-  {
-    crewId: 'po-zonas-verdes',
-    crewName: 'Cuadrilla de Áreas Verdes',
-    department: 'Parques y Ornato',
-    category: 'Ramas/arbolado',
-  },
-  {
-    crewId: 'mi-aceras',
-    crewName: 'Cuadrilla de Obras y Aceras',
-    department: 'Mantenimiento de Infraestructura',
-    category: 'Aceras dañadas',
-  },
-  {
-    crewId: 'mi-urbana',
-    crewName: 'Cuadrilla de Infraestructura Urbana',
-    department: 'Mantenimiento de Infraestructura',
-    category: 'Aceras dañadas',
-  },
-];
+function slugifyCrewId(department, crewName) {
+  return `${department}:${crewName}`
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+/**
+ * Construye el catálogo de cuadrillas a partir de `municipalCrews` definido en HU-15 (`crewAssignment.js`).
+ */
+export const MUNICIPAL_CREW_CATALOG = Object.entries(municipalCrews).flatMap(
+  ([category, { department, crews }]) =>
+    crews.map((crewName) => ({
+      crewId: slugifyCrewId(department, crewName),
+      crewName,
+      department,
+      category,
+    })),
+);
 
 function openDatabase() {
   return new Promise((resolve, reject) => {
@@ -88,16 +60,21 @@ export function getCurrentAssignment(report) {
   const crewId = typeof raw?.crewId === 'string' && raw.crewId.trim()
     ? raw.crewId.trim()
     : (typeof report.assignedCrewId === 'string' ? report.assignedCrewId.trim() : '');
-  const catalogMatch = crewId
+  const catalogMatchById = crewId
     ? MUNICIPAL_CREW_CATALOG.find((item) => item.crewId === crewId)
     : null;
-  const crewName = typeof raw?.crewName === 'string' && raw.crewName.trim()
-    ? raw.crewName.trim()
-    : (typeof raw?.crew === 'string' && raw.crew.trim()
-        ? raw.crew.trim()
-        : (typeof report.assignedCrew === 'string' && report.assignedCrew.trim()
-            ? report.assignedCrew.trim()
-            : (catalogMatch?.crewName || '')));
+  const rawCrewText =
+    (typeof raw?.crewName === 'string' && raw.crewName.trim()) ||
+    (typeof raw?.crew === 'string' && raw.crew.trim()) ||
+    (typeof report.assignedCrew === 'string' && report.assignedCrew.trim()) ||
+    '';
+  const catalogMatchByName = !catalogMatchById && rawCrewText
+    ? MUNICIPAL_CREW_CATALOG.find(
+        (item) => item.crewName.toLocaleLowerCase() === rawCrewText.toLocaleLowerCase(),
+      )
+    : null;
+  const catalogMatch = catalogMatchById || catalogMatchByName;
+  const crewName = rawCrewText || catalogMatch?.crewName || '';
   const department = typeof raw?.department === 'string' && raw.department.trim()
     ? raw.department.trim()
     : (typeof report.assignedDepartment === 'string' && report.assignedDepartment.trim()
@@ -110,12 +87,15 @@ export function getCurrentAssignment(report) {
 
   return {
     crewId: crewId || catalogMatch?.crewId || '',
+    crew: crewName || 'Cuadrilla sin especificar',
     crewName: crewName || 'Cuadrilla sin especificar',
     department: department || 'Dependencia sin especificar',
     instructions: typeof raw?.instructions === 'string' ? raw.instructions : '',
     deadline: raw?.deadline ?? null,
-    assignedAt: raw?.assignedAt ?? report.updatedAt ?? null,
-    assignedBy: typeof raw?.assignedBy === 'string' ? raw.assignedBy : '',
+    assignedAt: raw?.assignedAt ?? raw?.at ?? report.updatedAt ?? null,
+    assignedBy: typeof raw?.assignedBy === 'string' && raw.assignedBy
+      ? raw.assignedBy
+      : (typeof raw?.responsible === 'string' ? raw.responsible : ''),
     reassignmentCount: Number.isFinite(raw?.reassignmentCount) ? raw.reassignmentCount : 0,
   };
 }
@@ -235,11 +215,14 @@ export function applyCrewReassignment(report, input, at = new Date().toISOString
   const updatedAssignment = {
     ...(report.assignment && typeof report.assignment === 'object' ? report.assignment : {}),
     crewId: targetCrew.crewId,
+    crew: targetCrew.crewName,
     crewName: targetCrew.crewName,
     department: targetCrew.department,
     category: targetCrew.category,
     instructions: currentAssignment?.instructions || '',
     deadline: currentAssignment?.deadline ?? null,
+    at: currentAssignment?.assignedAt || at,
+    responsible,
     assignedAt: currentAssignment?.assignedAt || at,
     assignedBy: currentAssignment?.assignedBy || responsible,
     reassignedAt: at,
@@ -251,7 +234,6 @@ export function applyCrewReassignment(report, input, at = new Date().toISOString
     reassignmentCount: (currentAssignment?.reassignmentCount || 0) + 1,
   };
 
-  // TODO: conectar con estructura de auditoría general cuando se integre HU-21
   const historyEntry = {
     at,
     type: 'crew-reassignment',
@@ -269,7 +251,7 @@ export function applyCrewReassignment(report, input, at = new Date().toISOString
 
   const previousHistory = Array.isArray(report.history) ? report.history : [];
 
-  return {
+  const nextReport = {
     ...report,
     status: ASSIGNED_STATUS,
     assignment: updatedAssignment,
@@ -277,6 +259,13 @@ export function applyCrewReassignment(report, input, at = new Date().toISOString
     receptionEvent: `Reasignado a ${targetCrew.department}`,
     history: [...previousHistory, historyEntry],
   };
+
+  return addAudit(report, nextReport, {
+    action: `Reasignación de cuadrilla a ${targetCrew.crewName} (${targetCrew.department}). Motivo: ${justification}`,
+    actor: responsible,
+    role: 'gestor',
+    at,
+  });
 }
 
 /**

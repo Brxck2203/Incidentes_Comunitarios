@@ -24,9 +24,9 @@ Permitir al gestor municipal reasignar un incidente que ya se encuentra en estad
 
 ## Base y coordinación
 
-- HU-15 (RF-10): define la asignación inicial a una dependencia/cuadrilla y el paso al estado «Asignado». Mientras HU-15 no esté integrada en `main`, `src/services/crewReassignment.js` incluye un catálogo mínimo compatible con RF-10 marcado con `TODO: reemplazar cuando se integre HU-15`.
+- HU-15 (RF-10): integrado con `municipalCrews` y el contrato `{ department, crew, instructions, deadline, responsible, at }` de `src/services/crewAssignment.js`.
 - HU-08 / HU-09 (RF-05): los tickets secundarios de una consolidación no se reasignan individualmente; la operación se realiza sobre el expediente maestro.
-- HU-21 / HU-22 (RF-13): el registro del traslado conserva las propiedades estructuradas en `history` para su visualización en la bitácora de auditoría, sin reimplementar la lógica general de HU-21.
+- HU-21 / HU-22 (RF-13): cada reasignación invoca `addAudit` (`src/services/reportAudit.js`) además de conservar las propiedades estructuradas en `history`.
 - HU-23 (RF-14): las notificaciones automáticas corresponden a esa historia y no se implementan aquí.
 - `src/pages/ReportDetailPage.jsx`: punto de integración del panel municipal de reasignación en la ruta `/recepcion/:ticket`.
 

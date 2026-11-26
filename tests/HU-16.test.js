@@ -1,45 +1,45 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getReport } from '../src/services/reportRepository.js';
-import { ASSIGNED_STATUS, reassignReportCrew } from '../src/services/crewReassignment.js';
+import { assignReportCrew, getReport, recordMunicipalDecision } from '../src/services/reportRepository.js';
+import { ASSIGNED_STATUS, MUNICIPAL_CREW_CATALOG, reassignReportCrew } from '../src/services/crewReassignment.js';
 import { mockIndexedDB, original } from './helpers/mockIndexedDB.js';
 
-test('HU-16: reassignReportCrew persiste en IndexedDB v2 la nueva cuadrilla y conserva íntegra la bitácora previa', async () => {
-  const assignedRecord = {
-    ...original,
-    status: ASSIGNED_STATUS,
-    category: 'Baches',
-    assignment: {
-      crewId: 'rv-bacheo',
-      crewName: 'Cuadrilla de Bacheo y Asfalto',
-      department: 'Red Vial',
-      assignedAt: '2026-11-16T08:00:00.000Z',
-    },
-    history: [
-      ...original.history,
-      { at: '2026-11-16T08:00:00.000Z', action: 'Asignado a Red Vial — Cuadrilla de Bacheo y Asfalto' },
-    ],
-  };
+const viasCrew = MUNICIPAL_CREW_CATALOG.find((item) => item.crewName === 'Cuadrilla de vías');
 
-  mockIndexedDB([assignedRecord], 2);
+test('HU-16: reassignReportCrew se integra con HU-15 y HU-21, persistiendo la nueva cuadrilla y conservando la bitácora previa', async () => {
+  mockIndexedDB([{ ...original, category: 'Baches' }], 2);
 
-  const updated = await reassignReportCrew(assignedRecord.ticket, {
+  await recordMunicipalDecision(original.ticket, {
+    action: 'admit',
+    responsible: 'Gestor de Recepción',
+  });
+
+  const initiallyAssigned = await assignReportCrew(original.ticket, {
+    department: 'Red Vial',
+    crew: 'Cuadrilla de bacheo',
+    instructions: 'Bacheo con mezcla asfáltica',
+    deadline: '2027-01-15',
+    responsible: 'Gestor de Asignación',
+  });
+
+  const updated = await reassignReportCrew(original.ticket, {
     responsible: 'Coordinador Operativo',
-    crewId: 'rv-vialidad',
-    justification: 'La cuadrilla de bacheo atiende una emergencia en ruta principal; se traslada a mantenimiento vial.',
+    crewId: viasCrew.crewId,
+    justification: 'La cuadrilla de bacheo atiende una emergencia en ruta principal; se traslada a Cuadrilla de vías.',
   });
 
   assert.equal(updated.status, ASSIGNED_STATUS);
-  assert.equal(updated.assignment.crewId, 'rv-vialidad');
-  assert.equal(updated.assignment.crewName, 'Cuadrilla de Mantenimiento Vial');
-  assert.equal(updated.history.length, assignedRecord.history.length + 1);
+  assert.equal(updated.assignment.crew, 'Cuadrilla de vías');
+  assert.equal(updated.assignment.crewName, 'Cuadrilla de vías');
+  assert.equal(updated.history.length, initiallyAssigned.history.length + 1);
 
-  const fromDb = await getReport(assignedRecord.ticket);
-  assert.equal(fromDb.assignment.crewId, 'rv-vialidad');
-  assert.equal(fromDb.history.length, assignedRecord.history.length + 1);
-  assert.deepEqual(fromDb.history.slice(0, assignedRecord.history.length), assignedRecord.history);
-  assert.match(fromDb.history.at(-1).action, /Cuadrilla de Mantenimiento Vial/);
+  const fromDb = await getReport(original.ticket);
+  assert.equal(fromDb.assignment.crew, 'Cuadrilla de vías');
+  assert.equal(fromDb.history.length, initiallyAssigned.history.length + 1);
+  assert.deepEqual(fromDb.history.slice(0, initiallyAssigned.history.length), initiallyAssigned.history);
+  assert.match(fromDb.history.at(-1).action, /Cuadrilla de vías/);
   assert.match(fromDb.history.at(-1).action, /emergencia en ruta principal/);
+  assert.ok(Array.isArray(fromDb.auditLog) && fromDb.auditLog.length >= 1);
 });
 
 test('HU-16: reassignReportCrew rechaza motivos vacíos, tickets inexistentes o estados que no sean Asignado sin alterar IndexedDB', async () => {
@@ -47,9 +47,8 @@ test('HU-16: reassignReportCrew rechaza motivos vacíos, tickets inexistentes o 
     ...original,
     status: ASSIGNED_STATUS,
     assignment: {
-      crewId: 'rv-bacheo',
-      crewName: 'Cuadrilla de Bacheo y Asfalto',
       department: 'Red Vial',
+      crew: 'Cuadrilla de bacheo',
     },
   };
   const notAssignedRecord = {
@@ -64,7 +63,7 @@ test('HU-16: reassignReportCrew rechaza motivos vacíos, tickets inexistentes o 
     () =>
       reassignReportCrew(assignedRecord.ticket, {
         responsible: 'Gestor',
-        crewId: 'rv-vialidad',
+        crewId: viasCrew.crewId,
         justification: '',
       }),
     /motivo de la reasignación es obligatorio/i,
@@ -74,7 +73,7 @@ test('HU-16: reassignReportCrew rechaza motivos vacíos, tickets inexistentes o 
     () =>
       reassignReportCrew(notAssignedRecord.ticket, {
         responsible: 'Gestor',
-        crewId: 'rv-vialidad',
+        crewId: viasCrew.crewId,
         justification: 'Intento en estado En evaluación',
       }),
     /estado «Asignado»/i,
@@ -84,13 +83,13 @@ test('HU-16: reassignReportCrew rechaza motivos vacíos, tickets inexistentes o 
     () =>
       reassignReportCrew('RC-inexistente', {
         responsible: 'Gestor',
-        crewId: 'rv-vialidad',
+        crewId: viasCrew.crewId,
         justification: 'Motivo válido',
       }),
     /no existe/i,
   );
 
   const unchanged = await getReport(assignedRecord.ticket);
-  assert.equal(unchanged.assignment.crewId, 'rv-bacheo');
+  assert.equal(unchanged.assignment.crew, 'Cuadrilla de bacheo');
   assert.equal(unchanged.history.length, assignedRecord.history.length);
 });
