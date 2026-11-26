@@ -365,8 +365,6 @@ export function findPotentialDuplicates(position, category, excludeTicket = null
 // HU-15: single atomic assignment, without affecting other report records.
 export function assignReportCrew(ticket, input) {
   if (typeof ticket !== 'string' || !ticket.trim()) return Promise.reject(new Error('Ticket inválido.'));
-export function closeTechnicalOrder(ticket, input) {
-  const photos = validatePhotos(input?.photos);
   return transaction('readwrite', (store, done, fail) => {
     const request = store.get(ticket);
     request.onsuccess = () => {
@@ -380,6 +378,14 @@ export function closeTechnicalOrder(ticket, input) {
     };
     request.onerror = () => fail('No se pudo consultar el reporte.');
   }).then((report) => { notifyReportChange({ type: 'updated', ticket }); return report; });
+}
+
+export function closeTechnicalOrder(ticket, input) {
+  const photos = validatePhotos(input?.photos);
+  return transaction('readwrite', (store, done, fail) => {
+    const request = store.get(ticket);
+    request.onsuccess = () => {
+      try {
         if (!request.result) throw new Error('La orden no existe.');
         const updated = validateTechnicalClosure(request.result, { ...input, photos });
         const write = store.put(updated);
