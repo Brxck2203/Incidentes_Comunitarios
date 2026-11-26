@@ -92,7 +92,12 @@ export function mapHistoryEntryToPublicStage(entry) {
       summary: getStagePublicSummary('En atención'),
     };
   }
-  if (lowerAction.includes('marcado como resuelto') || lowerAction.includes('marcado como atendido') || lowerAction.includes('cierre técnico')) {
+  if (
+    lowerAction.includes('marcado como resuelto') ||
+    lowerAction.includes('marcado como atendido') ||
+    lowerAction.includes('cierre técnico') ||
+    lowerAction.includes('orden concluida')
+  ) {
     return {
       at: entry.at || null,
       stage: 'Atendido',

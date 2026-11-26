@@ -1,12 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createReport, recordMunicipalDecision, resolveIncident } from '../src/services/reportRepository.js';
+import {
+  assignReportCrew,
+  closeTechnicalOrder,
+  createReport,
+  recordMunicipalDecision,
+} from '../src/services/reportRepository.js';
 import { lookupPublicTicket } from '../src/services/publicTicketTracking.js';
 import { mockIndexedDB, original } from './helpers/mockIndexedDB.js';
 
 const photo = () => new Blob(['foto'], { type: 'image/png' });
 
-test('HU-19: lookupPublicTicket devuelve estado actual y línea de tiempo cronológica sin sesión y sin datos personales', async () => {
+test('HU-19: lookupPublicTicket devuelve estado actual y línea de tiempo completa (incluyendo Asignado y Atendido de HU-15/HU-18) sin sesión ni datos personales', async () => {
   mockIndexedDB([original], 2);
 
   const created = await createReport({
@@ -26,7 +31,18 @@ test('HU-19: lookupPublicTicket devuelve estado actual y línea de tiempo cronol
     action: 'admit',
     responsible: 'Inspector Municipal Dos',
   });
-  await resolveIncident(created.ticket);
+  await assignReportCrew(created.ticket, {
+    department: 'Mantenimiento de Infraestructura',
+    crew: 'Cuadrilla de aceras',
+    instructions: 'Reparar losa fracturada',
+    deadline: '2027-01-20',
+    responsible: 'Gestor de Despacho',
+  });
+  await closeTechnicalOrder(created.ticket, {
+    worker: 'Encargado de Cuadrilla Secreto',
+    note: 'Acera reparada y nivelada.',
+    photos: [photo()],
+  });
 
   const publicResult = await lookupPublicTicket(created.ticket);
 
@@ -36,7 +52,7 @@ test('HU-19: lookupPublicTicket devuelve estado actual y línea de tiempo cronol
   assert.equal(publicResult.category, 'Aceras dañadas');
   assert.deepEqual(
     publicResult.timeline.map((item) => item.stage),
-    ['Registrado / Recibido', 'En evaluación', 'Admitido', 'Atendido'],
+    ['Registrado / Recibido', 'En evaluación', 'Admitido', 'Asignado', 'Atendido'],
   );
 
   for (const step of publicResult.timeline) {
@@ -46,9 +62,12 @@ test('HU-19: lookupPublicTicket devuelve estado actual y línea de tiempo cronol
   const rawJson = JSON.stringify(publicResult);
   assert.doesNotMatch(rawJson, /ciudadano-privado-123/);
   assert.doesNotMatch(rawJson, /Inspector Municipal/);
+  assert.doesNotMatch(rawJson, /Gestor de Despacho/);
+  assert.doesNotMatch(rawJson, /Encargado de Cuadrilla Secreto/);
   assert.equal('reporterId' in publicResult, false);
   assert.equal('position' in publicResult, false);
   assert.equal('photos' in publicResult, false);
+  assert.equal('technicalClosure' in publicResult, false);
 });
 
 test('HU-19: lookupPublicTicket devuelve null para un ticket inexistente y lanza error claro ante formato inválido', async () => {
