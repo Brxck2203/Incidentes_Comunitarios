@@ -9,6 +9,7 @@ export default function MainLayout() {
         <NavLink to="/" end>Reportar</NavLink>
         <NavLink to="/reportes">Mis reportes</NavLink>
         <NavLink to="/recepcion">Recepción</NavLink>
+        <NavLink to="/estadisticas">Estadísticas</NavLink>
       </nav>
     </header>
     <main id="contenido" className="page-container" tabIndex={-1}><Outlet /></main>
