@@ -15,6 +15,9 @@ import CrewAssignmentForm from '../components/CrewAssignmentForm.jsx';
 import TechnicalClosureForm from '../components/TechnicalClosureForm.jsx';
 import LocationMap from '../components/LocationMap.jsx';
 import MunicipalDecisionPanel from '../components/MunicipalDecisionPanel.jsx';
+import AuditHistoryTab from '../components/AuditHistoryTab.jsx';
+import CrewReassignmentPanel from '../components/CrewReassignmentPanel.jsx';
+import ClosureCertificatePanel from '../components/ClosureCertificatePanel.jsx';
 import { subscribeToReportChanges } from '../services/reportNotifications.js';
 import { administrativeNotices } from '../services/administrativeNotices.js';
 import { evaluateActionAccess, getActiveAccessSession } from '../services/accessControl.js';
@@ -39,6 +42,7 @@ export default function ReportDetailPage() {
   const [draft, setDraft] = useState(null);
   const [photos, setPhotos] = useState([]);
   const [editing, setEditing] = useState(false);
+  const [activeTab, setActiveTab] = useState('detail');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -71,7 +75,7 @@ export default function ReportDetailPage() {
     let active = true;
     let requestSequence = 0;
     currentTicketRef.current = ticket;
-    setLoading(true); setError(''); setEditing(false); setReport(null); setDraft(null);
+    setLoading(true); setError(''); setEditing(false); setActiveTab('detail'); setReport(null); setDraft(null);
     setMessage(''); setPhotos([]); setPhotoSelectionNotice('');
     setConfirmOpen(Boolean(location.state?.confirm));
     setPendingEdit(null); setNearbyDraftMatches([]);
@@ -187,22 +191,58 @@ export default function ReportDetailPage() {
     await saveSnapshot(snapshot);
   }
   if (loading) return <p role="status">Cargando reporte…</p>;
-  if (!report) return <section><h1>Reporte no disponible</h1><p role="alert">{error || 'No se encontró el ticket solicitado.'}</p><Link to={fromReception ? '/recepcion' : '/reportes'}>{fromReception ? 'Volver a recepción de reportes' : 'Volver a mis reportes'}</Link></section>;
+  if (!report) return <section><h1>Reporte no disponible</h1><p role="alert">{error || 'No se encontró el ticket solicitado.'}</p><Link to={fromReception ? (canAdjudicate ? '/recepcion' : '/acceso') : '/reportes'}>{fromReception ? (canAdjudicate ? 'Volver a recepción de reportes' : 'Volver a mi panel de acceso') : 'Volver a mis reportes'}</Link></section>;
   const reportStatus = tracking?.masterUnavailable
     ? 'Estado del maestro no disponible'
     : tracking?.effectiveStatus ?? report.status ?? 'Estado no disponible';
   const effectiveReportIsActive = !tracking?.masterUnavailable
     && isActiveReport({ ...report, status: tracking?.effectiveStatus ?? report.status });
   const masterTicket = report.masterTicket || report.consolidation?.masterTicket;
+  const canConfirm = Boolean(
+    viewerId && (
+      report.reporterId === viewerId ||
+      report.confirmations?.some((confirmation) => confirmation.reporterId === viewerId)
+    ),
+  );
   return <section>
-    <Link className="text-link" to={fromReception ? '/recepcion' : '/reportes'}>
-      {fromReception ? 'Volver a recepción de reportes' : 'Volver a mis reportes'}
+    <Link className="text-link" to={fromReception ? (canAdjudicate ? '/recepcion' : '/acceso') : '/reportes'}>
+      {fromReception ? (canAdjudicate ? 'Volver a recepción de reportes' : 'Volver a mi panel de acceso') : 'Volver a mis reportes'}
     </Link>
     <h1>Detalle del reporte</h1>
     {location.state?.created && <p className="success-message" role="status">Reporte guardado. Conserva tu código de seguimiento.</p>}
     <p className="ticket">{report.ticket}</p>
     <p>{reportStatus} · {formatDateTime(report.createdAt)}</p>
     <p>Última actualización: {formatDateTime(tracking?.masterUnavailable ? null : tracking?.effectiveUpdatedAt ?? report.updatedAt)}</p>
+    {canViewAuditLog && (
+      <div className="municipal-tabs" role="tablist" aria-label="Secciones del expediente municipal">
+        <button
+          type="button"
+          role="tab"
+          id="tab-detalle-expediente"
+          aria-selected={activeTab === 'detail'}
+          aria-controls="panel-detalle-expediente"
+          className={`municipal-tab-button ${activeTab === 'detail' ? 'active' : 'secondary'}`}
+          onClick={() => setActiveTab('detail')}
+        >
+          Expediente del reporte
+        </button>
+        <button
+          type="button"
+          role="tab"
+          id="tab-historial-auditoria"
+          aria-selected={activeTab === 'audit'}
+          aria-controls="panel-historial-auditoria"
+          className={`municipal-tab-button ${activeTab === 'audit' ? 'active' : 'secondary'}`}
+          onClick={() => setActiveTab('audit')}
+        >
+          Historial de Auditoría
+        </button>
+      </div>
+    )}
+    {canViewAuditLog && activeTab === 'audit' ? (
+      <AuditHistoryTab report={report} />
+    ) : (
+      <div id="panel-detalle-expediente" role={canViewAuditLog ? 'tabpanel' : undefined} aria-labelledby={canViewAuditLog ? 'tab-detalle-expediente' : undefined}>
     <JointAttentionPanel tracking={tracking} municipalView={fromReception} />
     {masterTicket && <p className="consolidated-secondary-banner" role="status">
       Este reporte está enlazado como solicitud secundaria al expediente principal{' '}
@@ -219,6 +259,37 @@ export default function ReportDetailPage() {
       <p>{tracking.effectiveDecision.publicResponse}</p>
       {tracking.effectiveDecision.at && <p>Registrada el {formatDateTime(tracking.effectiveDecision.at)}.</p>}
     </section>}
+    <ClosureCertificatePanel
+      key={`closure-${report.ticket}-${reportStatus}`}
+      report={tracking?.isConsolidatedSecondary && !tracking?.masterUnavailable
+        ? {
+            ...report,
+            status: tracking.effectiveStatus,
+            updatedAt: tracking.effectiveUpdatedAt,
+            category: tracking.effectiveCategory || report.category,
+            technicalClosure: tracking.effectiveClosure || report.technicalClosure,
+            closureArchived: tracking.effectiveClosureArchived ?? report.closureArchived,
+            solutionConfirmedAt: tracking.effectiveSolutionConfirmedAt ?? report.solutionConfirmedAt,
+          }
+        : report}
+      municipalView={fromReception}
+      canConfirm={canConfirm}
+      reporterId={viewerId}
+      onConfirmed={(updated) => {
+        if (currentTicketRef.current === updated.ticket) {
+          setReport(updated);
+        }
+        setTracking((current) => current
+          ? {
+              ...current,
+              effectiveStatus: updated.status,
+              effectiveUpdatedAt: updated.updatedAt,
+              effectiveClosureArchived: Boolean(updated.closureArchived),
+              effectiveSolutionConfirmedAt: updated.solutionConfirmedAt || null,
+            }
+          : current);
+      }}
+    />
     <MunicipalDecisionPanel key={report.ticket} report={report} municipalView={canAdjudicate} onSaved={(updated) => {
       if (currentTicketRef.current !== updated.ticket) return;
       setReport(updated);
@@ -233,6 +304,18 @@ export default function ReportDetailPage() {
           publicResponse: updated.municipalDecision.publicResponse,
         } } : current);
     }} />
+    <CrewReassignmentPanel
+      key={`reassign-${report.ticket}`}
+      report={report}
+      municipalView={canAssignCrew}
+      onSaved={(updated) => {
+        if (currentTicketRef.current !== updated.ticket) return;
+        setReport(updated);
+        setTracking((current) => current
+          ? { ...current, effectiveStatus: updated.status, effectiveUpdatedAt: updated.updatedAt }
+          : current);
+      }}
+    />
     {duplicateLoading && <p role="status">Verificando posibles reportes duplicados…</p>}
     {duplicateStateCurrent && duplicateResult.error && <p className="error-message" role="alert">{duplicateResult.error}</p>}
     {duplicateStateCurrent && duplicateResult.info.isSuspectedDuplicate && (
@@ -249,7 +332,7 @@ export default function ReportDetailPage() {
     {canAssignCrew && <CrewAssignmentForm report={report} onSaved={(updated) => {
       setReport(updated); setMessage('El reporte quedó asignado a la cuadrilla.');
     }} />}
-    {report.assignment && <section aria-label="Asignación municipal">
+    {!fromReception && report.assignment && <section aria-label="Asignación municipal">
       <h2>Asignación de cuadrilla</h2>
       <p>{report.assignment.department} · {report.assignment.crew}</p>
       <p>Fecha límite: {report.assignment.deadline}</p>
@@ -262,12 +345,6 @@ export default function ReportDetailPage() {
     {canCloseTechnical && <TechnicalClosureForm report={report} onSaved={updated => {
       setReport(updated); setMessage('Orden concluida y registrada como Atendido.');
     }} />}
-    {report.technicalClosure && <section aria-label="Cierre técnico">
-      <h2>Respaldo de cierre técnico</h2>
-      <p>{report.technicalClosure.note}</p>
-      <p>Encargado: {report.technicalClosure.worker} · {formatDateTime(report.technicalClosure.at)}</p>
-      <Evidence photos={report.technicalClosure.photos || []} />
-    </section>}
     <h2>Evidencias</h2><Evidence audio={report.audio} photos={report.photos || []} />
     <ConsolidatedEvidenceSection report={report} />
     {report.confirmations?.some((confirmation) => confirmation.photos?.length > 0) && <>
@@ -359,14 +436,9 @@ export default function ReportDetailPage() {
         setEditing(true); setMessage(''); setPhotoSelectionNotice(''); setPendingEdit(null);
       }}>Agregar más detalles</button>}
     </>}
-    {canViewAuditLog && <section aria-label="Bitácora de auditoría" className="selected-incident">
-      <h2>Bitácora de auditoría (solo lectura)</h2>
-      <ol>{(report.auditLog || []).map(event => <li key={event.id}>
-        {formatDateTime(event.at)} · {event.action} · {event.actor} ({event.role}) · {event.previousStatus || '—'} → {event.newStatus || '—'}
-      </li>)}</ol>
-      <p>Los movimientos se agregan automáticamente y no se pueden editar desde esta interfaz.</p>
-    </section>}
     <h2>Historial de actualizaciones</h2>
     <ol>{(report.history || []).map((entry, index) => <li key={index}>{formatDateTime(entry.at)} · {entry.action}</li>)}</ol>
+      </div>
+    )}
   </section>;
 }
