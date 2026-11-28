@@ -15,6 +15,7 @@ import CrewAssignmentForm from '../components/CrewAssignmentForm.jsx';
 import TechnicalClosureForm from '../components/TechnicalClosureForm.jsx';
 import LocationMap from '../components/LocationMap.jsx';
 import MunicipalDecisionPanel from '../components/MunicipalDecisionPanel.jsx';
+import AuditHistoryTab from '../components/AuditHistoryTab.jsx';
 import CrewReassignmentPanel from '../components/CrewReassignmentPanel.jsx';
 import { subscribeToReportChanges } from '../services/reportNotifications.js';
 import { administrativeNotices } from '../services/administrativeNotices.js';
@@ -34,6 +35,7 @@ export default function ReportDetailPage() {
   const [draft, setDraft] = useState(null);
   const [photos, setPhotos] = useState([]);
   const [editing, setEditing] = useState(false);
+  const [activeTab, setActiveTab] = useState('detail');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -66,7 +68,7 @@ export default function ReportDetailPage() {
     let active = true;
     let requestSequence = 0;
     currentTicketRef.current = ticket;
-    setLoading(true); setError(''); setEditing(false); setReport(null); setDraft(null);
+    setLoading(true); setError(''); setEditing(false); setActiveTab('detail'); setReport(null); setDraft(null);
     setMessage(''); setPhotos([]); setPhotoSelectionNotice('');
     setConfirmOpen(Boolean(location.state?.confirm));
     setPendingEdit(null); setNearbyDraftMatches([]);
@@ -198,6 +200,36 @@ export default function ReportDetailPage() {
     <p className="ticket">{report.ticket}</p>
     <p>{reportStatus} · {formatDateTime(report.createdAt)}</p>
     <p>Última actualización: {formatDateTime(tracking?.masterUnavailable ? null : tracking?.effectiveUpdatedAt ?? report.updatedAt)}</p>
+    {fromReception && (
+      <div className="municipal-tabs" role="tablist" aria-label="Secciones del expediente municipal">
+        <button
+          type="button"
+          role="tab"
+          id="tab-detalle-expediente"
+          aria-selected={activeTab === 'detail'}
+          aria-controls="panel-detalle-expediente"
+          className={`municipal-tab-button ${activeTab === 'detail' ? 'active' : 'secondary'}`}
+          onClick={() => setActiveTab('detail')}
+        >
+          Expediente del reporte
+        </button>
+        <button
+          type="button"
+          role="tab"
+          id="tab-historial-auditoria"
+          aria-selected={activeTab === 'audit'}
+          aria-controls="panel-historial-auditoria"
+          className={`municipal-tab-button ${activeTab === 'audit' ? 'active' : 'secondary'}`}
+          onClick={() => setActiveTab('audit')}
+        >
+          Historial de Auditoría
+        </button>
+      </div>
+    )}
+    {fromReception && activeTab === 'audit' ? (
+      <AuditHistoryTab report={report} />
+    ) : (
+      <div id="panel-detalle-expediente" role={fromReception ? 'tabpanel' : undefined} aria-labelledby={fromReception ? 'tab-detalle-expediente' : undefined}>
     <JointAttentionPanel tracking={tracking} municipalView={fromReception} />
     {masterTicket && <p className="consolidated-secondary-banner" role="status">
       Este reporte está enlazado como solicitud secundaria al expediente principal{' '}
@@ -366,14 +398,9 @@ export default function ReportDetailPage() {
         setEditing(true); setMessage(''); setPhotoSelectionNotice(''); setPendingEdit(null);
       }}>Agregar más detalles</button>}
     </>}
-    {fromReception && <section aria-label="Bitácora de auditoría" className="selected-incident">
-      <h2>Bitácora de auditoría (solo lectura)</h2>
-      <ol>{(report.auditLog || []).map(event => <li key={event.id}>
-        {formatDateTime(event.at)} · {event.action} · {event.actor} ({event.role}) · {event.previousStatus || '—'} → {event.newStatus || '—'}
-      </li>)}</ol>
-      <p>Los movimientos se agregan automáticamente y no se pueden editar desde esta interfaz.</p>
-    </section>}
     <h2>Historial de actualizaciones</h2>
     <ol>{(report.history || []).map((entry, index) => <li key={index}>{formatDateTime(entry.at)} · {entry.action}</li>)}</ol>
+      </div>
+    )}
   </section>;
 }
