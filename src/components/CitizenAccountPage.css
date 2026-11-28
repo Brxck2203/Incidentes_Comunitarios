@@ -1,0 +1,128 @@
+.citizen-auth-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 1.25rem 0;
+}
+
+.citizen-auth-tabs button {
+  min-height: 48px;
+  min-width: 48px;
+}
+
+.citizen-auth-card {
+  max-width: 540px;
+  margin: 1rem 0 2rem;
+  padding: 1.35rem;
+  border: 1px solid #94a3b8;
+  border-radius: 0.75rem;
+  background: #ffffff;
+}
+
+.citizen-auth-card h2 {
+  margin-top: 0;
+}
+
+.citizen-auth-fields {
+  display: grid;
+  gap: 1rem;
+}
+
+.citizen-auth-fields label {
+  margin: 0;
+  font-weight: 650;
+}
+
+.citizen-auth-fields input[type='email'],
+.citizen-auth-fields input[type='password'] {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  margin-top: 0.35rem;
+}
+
+.citizen-claim-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 48px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #bfdbfe;
+  border-radius: 0.5rem;
+  background: #f8fbff;
+  font-weight: 600;
+}
+
+.citizen-claim-checkbox input[type='checkbox'] {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+}
+
+.citizen-auth-card .actions {
+  margin-top: 1.25rem;
+}
+
+.citizen-auth-card .actions button {
+  min-height: 48px;
+  min-width: 48px;
+}
+
+.citizen-session-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 1.25rem 0 1.75rem;
+  padding: 1.15rem 1.25rem;
+  border: 2px solid #123f73;
+  border-radius: 0.75rem;
+  background: #f0f6ff;
+}
+
+.citizen-session-banner p {
+  margin: 0.2rem 0;
+}
+
+.citizen-session-banner button {
+  min-height: 48px;
+  min-width: 48px;
+}
+
+.citizen-portfolio-grid {
+  display: grid;
+  gap: 2rem;
+  margin: 1.5rem 0 2rem;
+}
+
+.citizen-portfolio-list {
+  display: grid;
+  gap: 0.85rem;
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+}
+
+.citizen-portfolio-item {
+  padding: 1rem 1.15rem;
+  border: 1px solid #cbd5e1;
+  border-left: 5px solid #123f73;
+  border-radius: 0.6rem;
+  background: #ffffff;
+}
+
+.citizen-portfolio-item-supported {
+  border-left-color: #166534;
+}
+
+.citizen-portfolio-item p {
+  margin: 0.35rem 0;
+}
+
+.citizen-portfolio-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}

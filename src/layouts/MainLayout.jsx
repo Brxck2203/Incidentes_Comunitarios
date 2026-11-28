@@ -8,6 +8,7 @@ export default function MainLayout() {
       <nav aria-label="Navegación principal">
         <NavLink to="/" end>Reportar</NavLink>
         <NavLink to="/reportes">Mis reportes</NavLink>
+        <NavLink to="/cuenta">Mi cuenta</NavLink>
         <NavLink to="/recepcion">Recepción</NavLink>
       </nav>
     </header>
