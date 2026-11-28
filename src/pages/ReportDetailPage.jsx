@@ -15,6 +15,7 @@ import CrewAssignmentForm from '../components/CrewAssignmentForm.jsx';
 import TechnicalClosureForm from '../components/TechnicalClosureForm.jsx';
 import LocationMap from '../components/LocationMap.jsx';
 import MunicipalDecisionPanel from '../components/MunicipalDecisionPanel.jsx';
+import CrewReassignmentPanel from '../components/CrewReassignmentPanel.jsx';
 import { subscribeToReportChanges } from '../services/reportNotifications.js';
 import { administrativeNotices } from '../services/administrativeNotices.js';
 
@@ -227,6 +228,18 @@ export default function ReportDetailPage() {
           publicResponse: updated.municipalDecision.publicResponse,
         } } : current);
     }} />
+    <CrewReassignmentPanel
+      key={`reassign-${report.ticket}`}
+      report={report}
+      municipalView={fromReception}
+      onSaved={(updated) => {
+        if (currentTicketRef.current !== updated.ticket) return;
+        setReport(updated);
+        setTracking((current) => current
+          ? { ...current, effectiveStatus: updated.status, effectiveUpdatedAt: updated.updatedAt }
+          : current);
+      }}
+    />
     {duplicateLoading && <p role="status">Verificando posibles reportes duplicados…</p>}
     {duplicateStateCurrent && duplicateResult.error && <p className="error-message" role="alert">{duplicateResult.error}</p>}
     {duplicateStateCurrent && duplicateResult.info.isSuspectedDuplicate && (
@@ -243,7 +256,7 @@ export default function ReportDetailPage() {
     {fromReception && <CrewAssignmentForm report={report} onSaved={(updated) => {
       setReport(updated); setMessage('El reporte quedó asignado a la cuadrilla.');
     }} />}
-    {report.assignment && <section aria-label="Asignación municipal">
+    {!fromReception && report.assignment && <section aria-label="Asignación municipal">
       <h2>Asignación de cuadrilla</h2>
       <p>{report.assignment.department} · {report.assignment.crew}</p>
       <p>Fecha límite: {report.assignment.deadline}</p>
