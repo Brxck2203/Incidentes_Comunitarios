@@ -17,6 +17,7 @@ import LocationMap from '../components/LocationMap.jsx';
 import MunicipalDecisionPanel from '../components/MunicipalDecisionPanel.jsx';
 import AuditHistoryTab from '../components/AuditHistoryTab.jsx';
 import CrewReassignmentPanel from '../components/CrewReassignmentPanel.jsx';
+import ClosureCertificatePanel from '../components/ClosureCertificatePanel.jsx';
 import { subscribeToReportChanges } from '../services/reportNotifications.js';
 import { administrativeNotices } from '../services/administrativeNotices.js';
 
@@ -191,6 +192,12 @@ export default function ReportDetailPage() {
   const effectiveReportIsActive = !tracking?.masterUnavailable
     && isActiveReport({ ...report, status: tracking?.effectiveStatus ?? report.status });
   const masterTicket = report.masterTicket || report.consolidation?.masterTicket;
+  const canConfirm = Boolean(
+    viewerId && (
+      report.reporterId === viewerId ||
+      report.confirmations?.some((confirmation) => confirmation.reporterId === viewerId)
+    ),
+  );
   return <section>
     <Link className="text-link" to={fromReception ? '/recepcion' : '/reportes'}>
       {fromReception ? 'Volver a recepción de reportes' : 'Volver a mis reportes'}
@@ -246,6 +253,37 @@ export default function ReportDetailPage() {
       <p>{tracking.effectiveDecision.publicResponse}</p>
       {tracking.effectiveDecision.at && <p>Registrada el {formatDateTime(tracking.effectiveDecision.at)}.</p>}
     </section>}
+    <ClosureCertificatePanel
+      key={`closure-${report.ticket}-${reportStatus}`}
+      report={tracking?.isConsolidatedSecondary && !tracking?.masterUnavailable
+        ? {
+            ...report,
+            status: tracking.effectiveStatus,
+            updatedAt: tracking.effectiveUpdatedAt,
+            category: tracking.effectiveCategory || report.category,
+            technicalClosure: tracking.effectiveClosure || report.technicalClosure,
+            closureArchived: tracking.effectiveClosureArchived ?? report.closureArchived,
+            solutionConfirmedAt: tracking.effectiveSolutionConfirmedAt ?? report.solutionConfirmedAt,
+          }
+        : report}
+      municipalView={fromReception}
+      canConfirm={canConfirm}
+      reporterId={viewerId}
+      onConfirmed={(updated) => {
+        if (currentTicketRef.current === updated.ticket) {
+          setReport(updated);
+        }
+        setTracking((current) => current
+          ? {
+              ...current,
+              effectiveStatus: updated.status,
+              effectiveUpdatedAt: updated.updatedAt,
+              effectiveClosureArchived: Boolean(updated.closureArchived),
+              effectiveSolutionConfirmedAt: updated.solutionConfirmedAt || null,
+            }
+          : current);
+      }}
+    />
     <MunicipalDecisionPanel key={report.ticket} report={report} municipalView={fromReception} onSaved={(updated) => {
       if (currentTicketRef.current !== updated.ticket) return;
       setReport(updated);
@@ -301,12 +339,6 @@ export default function ReportDetailPage() {
     {fromReception && <TechnicalClosureForm report={report} onSaved={updated => {
       setReport(updated); setMessage('Orden concluida y registrada como Atendido.');
     }} />}
-    {report.technicalClosure && <section aria-label="Cierre técnico">
-      <h2>Respaldo de cierre técnico</h2>
-      <p>{report.technicalClosure.note}</p>
-      <p>Encargado: {report.technicalClosure.worker} · {formatDateTime(report.technicalClosure.at)}</p>
-      <Evidence photos={report.technicalClosure.photos || []} />
-    </section>}
     <h2>Evidencias</h2><Evidence audio={report.audio} photos={report.photos || []} />
     <ConsolidatedEvidenceSection report={report} />
     {report.confirmations?.some((confirmation) => confirmation.photos?.length > 0) && <>
