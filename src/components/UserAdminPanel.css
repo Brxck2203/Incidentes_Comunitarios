@@ -1,0 +1,169 @@
+.user-admin-bootstrap {
+  margin: 1.25rem 0;
+  padding: 1.15rem 1.25rem;
+  border: 2px solid #123f73;
+  border-radius: 0.75rem;
+  background: #f0f6ff;
+}
+
+.user-admin-bootstrap h2 {
+  margin: 0 0 0.4rem;
+  font-size: 1.15rem;
+  color: #123f73;
+}
+
+.user-admin-bootstrap p {
+  margin: 0;
+}
+
+.user-admin-form {
+  margin: 1.5rem 0 2rem;
+  padding: 1.25rem;
+  border: 1px solid #94a3b8;
+  border-radius: 0.75rem;
+  background: #ffffff;
+}
+
+.user-admin-form h2 {
+  margin-top: 0;
+}
+
+.user-admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 1rem;
+}
+
+.user-admin-grid label {
+  margin: 0;
+  font-weight: 650;
+}
+
+.user-admin-grid input,
+.user-admin-grid select {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  margin-top: 0.35rem;
+}
+
+.role-modules-preview {
+  margin: 1.25rem 0;
+  padding: 1rem;
+  border: 1px solid #bfdbfe;
+  border-radius: 0.6rem;
+  background: #f8fbff;
+}
+
+.role-modules-preview h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  color: #123f73;
+}
+
+.module-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+
+.module-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid #123f73;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #123f73;
+  font-size: 0.88rem;
+  font-weight: 650;
+}
+
+.user-admin-form .actions {
+  margin-top: 1.25rem;
+}
+
+.user-admin-form .actions button {
+  min-height: 48px;
+  min-width: 48px;
+}
+
+.staff-list {
+  display: grid;
+  gap: 1rem;
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+}
+
+.staff-card {
+  padding: 1.15rem 1.25rem;
+  border: 1px solid #cbd5e1;
+  border-left: 5px solid #123f73;
+  border-radius: 0.65rem;
+  background: #ffffff;
+}
+
+.staff-card-inactive {
+  border-left-color: #64748b;
+  background: #f8fafc;
+}
+
+.staff-card-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.staff-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.staff-role-badge,
+.staff-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.staff-role-badge {
+  background: #123f73;
+  color: #ffffff;
+}
+
+.staff-status-active {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #166534;
+}
+
+.staff-status-inactive {
+  background: #e2e8f0;
+  color: #334155;
+  border: 1px solid #475569;
+}
+
+.staff-card-meta {
+  margin: 0.5rem 0;
+  color: #1e293b;
+  overflow-wrap: anywhere;
+}
+
+.staff-card-actions {
+  margin-top: 0.85rem;
+}
+
+.staff-card-actions button {
+  min-height: 48px;
+  min-width: 48px;
+}
