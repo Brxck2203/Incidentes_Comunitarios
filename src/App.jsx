@@ -4,6 +4,7 @@ import MainLayout from './layouts/MainLayout.jsx';
 import HomePage from './pages/HomePage.jsx';
 import ReportsPage from './pages/ReportsPage.jsx';
 import ReportDetailPage from './pages/ReportDetailPage.jsx';
+import StatisticsDashboardPage from './pages/StatisticsDashboardPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 import './App.css';
 
@@ -15,6 +16,7 @@ export default function App() {
       <Route path="reportes/:ticket" element={<ReportDetailPage />} />
       <Route path="recepcion" element={<ReportsPage reception />} />
       <Route path="recepcion/:ticket" element={<ReportDetailPage />} />
+      <Route path="estadisticas" element={<StatisticsDashboardPage />} />
       <Route path="*" element={<NotFoundPage />} />
     </Route>
   </Routes></BrowserRouter></ErrorBoundary>;
