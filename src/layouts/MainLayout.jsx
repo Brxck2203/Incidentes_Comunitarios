@@ -7,6 +7,7 @@ export default function MainLayout() {
       <Link className="brand" to="/">Reporte Ciudadano</Link>
       <nav aria-label="Navegación principal">
         <NavLink to="/" end>Reportar</NavLink>
+        <NavLink to="/consulta">Consultar ticket</NavLink>
         <NavLink to="/reportes">Mis reportes</NavLink>
         <NavLink to="/recepcion">Recepción</NavLink>
         <NavLink to="/usuarios">Usuarios</NavLink>
