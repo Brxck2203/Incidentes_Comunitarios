@@ -9,6 +9,7 @@ export default function MainLayout() {
         <NavLink to="/" end>Reportar</NavLink>
         <NavLink to="/consulta">Consultar ticket</NavLink>
         <NavLink to="/reportes">Mis reportes</NavLink>
+        <NavLink to="/cuenta">Mi cuenta</NavLink>
         <NavLink to="/recepcion">Recepción</NavLink>
       </nav>
     </header>
