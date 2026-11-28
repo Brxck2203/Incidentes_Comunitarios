@@ -5,6 +5,7 @@ import HomePage from './pages/HomePage.jsx';
 import ReportsPage from './pages/ReportsPage.jsx';
 import ReportDetailPage from './pages/ReportDetailPage.jsx';
 import PublicLookupPage from './pages/PublicLookupPage.jsx';
+import StatisticsPage from './pages/StatisticsPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 import './App.css';
 
@@ -18,6 +19,8 @@ export default function App() {
       <Route path="reportes/:ticket" element={<ReportDetailPage />} />
       <Route path="recepcion" element={<ReportsPage reception />} />
       <Route path="recepcion/:ticket" element={<ReportDetailPage />} />
+      {/* TODO: reemplazar por el módulo completo de estadísticas cuando se integre HU-27 */}
+      <Route path="estadisticas" element={<StatisticsPage />} />
       <Route path="*" element={<NotFoundPage />} />
     </Route>
   </Routes></BrowserRouter></ErrorBoundary>;
