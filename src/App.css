@@ -299,3 +299,22 @@ audio { width: 100%; min-height: 48px; margin-top: 1rem; }
 .crew-assignment-summary dd { margin: .15rem 0 0; color: #152b3c; overflow-wrap: anywhere; }
 .crew-reassignment-form { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #bfdbfe; }
 .crew-reassignment-form h3 { margin-top: 0; }
+
+/* HU-19: buscador público de estado y línea de tiempo por ticket. */
+.public-lookup-form { max-width: 560px; margin: 1.25rem 0 1.75rem; padding: 1.25rem; background: #fff; border: 1px solid #cbd5e1; border-radius: .75rem; }
+.public-status-card { margin: 1.5rem 0; padding: 1.5rem; background: #fff; border: 2px solid #123f73; border-radius: .85rem; }
+.public-status-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .75rem; margin-bottom: 1rem; }
+.public-status-header h2 { margin: 0; }
+.public-stage-pill { display: inline-flex; align-items: center; padding: .3rem .85rem; border-radius: 999px; background: #123f73; color: #fff; font-weight: 700; font-size: .95rem; }
+.public-status-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .85rem; margin: 0 0 1.25rem; padding: 1rem; background: #f8fbff; border: 1px solid #bfdbfe; border-radius: .65rem; }
+.public-status-summary dt { font-size: .85rem; font-weight: 650; color: #475569; }
+.public-status-summary dd { margin: .2rem 0 0; color: #152b3c; overflow-wrap: anywhere; }
+.public-joint-notice { margin: 1rem 0; padding: 1rem; background: #f0f6ff; border-left: 4px solid #123f73; border-radius: .4rem; }
+.public-joint-notice p { margin: 0; }
+.public-timeline { list-style: none; padding: 0; margin: .75rem 0 1.25rem; display: grid; gap: .85rem; }
+.public-timeline-item { padding: .85rem 1rem; background: #f8fafc; border: 1px solid #cbd5e1; border-left: 4px solid #123f73; border-radius: .5rem; }
+.public-timeline-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .5rem; }
+.public-timeline-stage { color: #123f73; font-size: 1.05rem; }
+.public-timeline-date { font-size: .9rem; color: #475569; font-weight: 600; }
+.public-timeline-summary { margin: .35rem 0 0; color: #1e293b; }
+.public-privacy-note { margin: 1rem 0 0; font-size: .9rem; color: #475569; }
