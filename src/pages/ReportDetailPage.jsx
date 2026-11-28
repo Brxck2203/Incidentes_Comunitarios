@@ -17,6 +17,7 @@ import LocationMap from '../components/LocationMap.jsx';
 import MunicipalDecisionPanel from '../components/MunicipalDecisionPanel.jsx';
 import { subscribeToReportChanges } from '../services/reportNotifications.js';
 import { administrativeNotices } from '../services/administrativeNotices.js';
+import { evaluateActionAccess, getActiveAccessSession } from '../services/accessControl.js';
 
 function formatDateTime(value) {
   if (!value) return 'No disponible';
@@ -28,6 +29,11 @@ export default function ReportDetailPage() {
   const { ticket } = useParams();
   const location = useLocation();
   const fromReception = Boolean(location.state?.fromReception || location.pathname.startsWith('/recepcion/'));
+  const activeSession = getActiveAccessSession().session;
+  const canAdjudicate = fromReception && evaluateActionAccess('municipal-admission', activeSession);
+  const canAssignCrew = fromReception && evaluateActionAccess('crew-assignment', activeSession);
+  const canCloseTechnical = fromReception && evaluateActionAccess('technical-closure', activeSession);
+  const canViewAuditLog = fromReception && evaluateActionAccess('audit-log', activeSession);
   const [report, setReport] = useState(null);
   const [tracking, setTracking] = useState(null);
   const [draft, setDraft] = useState(null);
@@ -213,7 +219,7 @@ export default function ReportDetailPage() {
       <p>{tracking.effectiveDecision.publicResponse}</p>
       {tracking.effectiveDecision.at && <p>Registrada el {formatDateTime(tracking.effectiveDecision.at)}.</p>}
     </section>}
-    <MunicipalDecisionPanel key={report.ticket} report={report} municipalView={fromReception} onSaved={(updated) => {
+    <MunicipalDecisionPanel key={report.ticket} report={report} municipalView={canAdjudicate} onSaved={(updated) => {
       if (currentTicketRef.current !== updated.ticket) return;
       setReport(updated);
       setTracking((current) => current ? { ...current, effectiveStatus: updated.status,
@@ -240,7 +246,7 @@ export default function ReportDetailPage() {
     {duplicateStateCurrent && !duplicateResult.error && !duplicateResult.info.isSuspectedDuplicate && (
       <p role="status">No se encontraron posibles reportes duplicados.</p>
     )}
-    {fromReception && <CrewAssignmentForm report={report} onSaved={(updated) => {
+    {canAssignCrew && <CrewAssignmentForm report={report} onSaved={(updated) => {
       setReport(updated); setMessage('El reporte quedó asignado a la cuadrilla.');
     }} />}
     {report.assignment && <section aria-label="Asignación municipal">
@@ -253,7 +259,7 @@ export default function ReportDetailPage() {
       <h2>{notice.title}</h2><p>{formatDateTime(notice.at)} · {notice.message}</p>
       <Link to={notice.url}>Ver dictamen o expediente principal</Link>
     </section>)}
-    {fromReception && <TechnicalClosureForm report={report} onSaved={updated => {
+    {canCloseTechnical && <TechnicalClosureForm report={report} onSaved={updated => {
       setReport(updated); setMessage('Orden concluida y registrada como Atendido.');
     }} />}
     {report.technicalClosure && <section aria-label="Cierre técnico">
@@ -353,7 +359,7 @@ export default function ReportDetailPage() {
         setEditing(true); setMessage(''); setPhotoSelectionNotice(''); setPendingEdit(null);
       }}>Agregar más detalles</button>}
     </>}
-    {fromReception && <section aria-label="Bitácora de auditoría" className="selected-incident">
+    {canViewAuditLog && <section aria-label="Bitácora de auditoría" className="selected-incident">
       <h2>Bitácora de auditoría (solo lectura)</h2>
       <ol>{(report.auditLog || []).map(event => <li key={event.id}>
         {formatDateTime(event.at)} · {event.action} · {event.actor} ({event.role}) · {event.previousStatus || '—'} → {event.newStatus || '—'}
