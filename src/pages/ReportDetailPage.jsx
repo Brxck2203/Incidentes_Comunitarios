@@ -20,6 +20,7 @@ import CrewReassignmentPanel from '../components/CrewReassignmentPanel.jsx';
 import ClosureCertificatePanel from '../components/ClosureCertificatePanel.jsx';
 import { subscribeToReportChanges } from '../services/reportNotifications.js';
 import { administrativeNotices } from '../services/administrativeNotices.js';
+import { evaluateActionAccess, getActiveAccessSession } from '../services/accessControl.js';
 
 function formatDateTime(value) {
   if (!value) return 'No disponible';
@@ -31,6 +32,11 @@ export default function ReportDetailPage() {
   const { ticket } = useParams();
   const location = useLocation();
   const fromReception = Boolean(location.state?.fromReception || location.pathname.startsWith('/recepcion/'));
+  const activeSession = getActiveAccessSession().session;
+  const canAdjudicate = fromReception && evaluateActionAccess('municipal-admission', activeSession);
+  const canAssignCrew = fromReception && evaluateActionAccess('crew-assignment', activeSession);
+  const canCloseTechnical = fromReception && evaluateActionAccess('technical-closure', activeSession);
+  const canViewAuditLog = fromReception && evaluateActionAccess('audit-log', activeSession);
   const [report, setReport] = useState(null);
   const [tracking, setTracking] = useState(null);
   const [draft, setDraft] = useState(null);
@@ -185,7 +191,7 @@ export default function ReportDetailPage() {
     await saveSnapshot(snapshot);
   }
   if (loading) return <p role="status">Cargando reporte…</p>;
-  if (!report) return <section><h1>Reporte no disponible</h1><p role="alert">{error || 'No se encontró el ticket solicitado.'}</p><Link to={fromReception ? '/recepcion' : '/reportes'}>{fromReception ? 'Volver a recepción de reportes' : 'Volver a mis reportes'}</Link></section>;
+  if (!report) return <section><h1>Reporte no disponible</h1><p role="alert">{error || 'No se encontró el ticket solicitado.'}</p><Link to={fromReception ? (canAdjudicate ? '/recepcion' : '/acceso') : '/reportes'}>{fromReception ? (canAdjudicate ? 'Volver a recepción de reportes' : 'Volver a mi panel de acceso') : 'Volver a mis reportes'}</Link></section>;
   const reportStatus = tracking?.masterUnavailable
     ? 'Estado del maestro no disponible'
     : tracking?.effectiveStatus ?? report.status ?? 'Estado no disponible';
@@ -199,15 +205,15 @@ export default function ReportDetailPage() {
     ),
   );
   return <section>
-    <Link className="text-link" to={fromReception ? '/recepcion' : '/reportes'}>
-      {fromReception ? 'Volver a recepción de reportes' : 'Volver a mis reportes'}
+    <Link className="text-link" to={fromReception ? (canAdjudicate ? '/recepcion' : '/acceso') : '/reportes'}>
+      {fromReception ? (canAdjudicate ? 'Volver a recepción de reportes' : 'Volver a mi panel de acceso') : 'Volver a mis reportes'}
     </Link>
     <h1>Detalle del reporte</h1>
     {location.state?.created && <p className="success-message" role="status">Reporte guardado. Conserva tu código de seguimiento.</p>}
     <p className="ticket">{report.ticket}</p>
     <p>{reportStatus} · {formatDateTime(report.createdAt)}</p>
     <p>Última actualización: {formatDateTime(tracking?.masterUnavailable ? null : tracking?.effectiveUpdatedAt ?? report.updatedAt)}</p>
-    {fromReception && (
+    {canViewAuditLog && (
       <div className="municipal-tabs" role="tablist" aria-label="Secciones del expediente municipal">
         <button
           type="button"
@@ -233,10 +239,10 @@ export default function ReportDetailPage() {
         </button>
       </div>
     )}
-    {fromReception && activeTab === 'audit' ? (
+    {canViewAuditLog && activeTab === 'audit' ? (
       <AuditHistoryTab report={report} />
     ) : (
-      <div id="panel-detalle-expediente" role={fromReception ? 'tabpanel' : undefined} aria-labelledby={fromReception ? 'tab-detalle-expediente' : undefined}>
+      <div id="panel-detalle-expediente" role={canViewAuditLog ? 'tabpanel' : undefined} aria-labelledby={canViewAuditLog ? 'tab-detalle-expediente' : undefined}>
     <JointAttentionPanel tracking={tracking} municipalView={fromReception} />
     {masterTicket && <p className="consolidated-secondary-banner" role="status">
       Este reporte está enlazado como solicitud secundaria al expediente principal{' '}
@@ -284,7 +290,7 @@ export default function ReportDetailPage() {
           : current);
       }}
     />
-    <MunicipalDecisionPanel key={report.ticket} report={report} municipalView={fromReception} onSaved={(updated) => {
+    <MunicipalDecisionPanel key={report.ticket} report={report} municipalView={canAdjudicate} onSaved={(updated) => {
       if (currentTicketRef.current !== updated.ticket) return;
       setReport(updated);
       setTracking((current) => current ? { ...current, effectiveStatus: updated.status,
@@ -301,7 +307,7 @@ export default function ReportDetailPage() {
     <CrewReassignmentPanel
       key={`reassign-${report.ticket}`}
       report={report}
-      municipalView={fromReception}
+      municipalView={canAssignCrew}
       onSaved={(updated) => {
         if (currentTicketRef.current !== updated.ticket) return;
         setReport(updated);
@@ -323,7 +329,7 @@ export default function ReportDetailPage() {
     {duplicateStateCurrent && !duplicateResult.error && !duplicateResult.info.isSuspectedDuplicate && (
       <p role="status">No se encontraron posibles reportes duplicados.</p>
     )}
-    {fromReception && <CrewAssignmentForm report={report} onSaved={(updated) => {
+    {canAssignCrew && <CrewAssignmentForm report={report} onSaved={(updated) => {
       setReport(updated); setMessage('El reporte quedó asignado a la cuadrilla.');
     }} />}
     {!fromReception && report.assignment && <section aria-label="Asignación municipal">
@@ -336,7 +342,7 @@ export default function ReportDetailPage() {
       <h2>{notice.title}</h2><p>{formatDateTime(notice.at)} · {notice.message}</p>
       <Link to={notice.url}>Ver dictamen o expediente principal</Link>
     </section>)}
-    {fromReception && <TechnicalClosureForm report={report} onSaved={updated => {
+    {canCloseTechnical && <TechnicalClosureForm report={report} onSaved={updated => {
       setReport(updated); setMessage('Orden concluida y registrada como Atendido.');
     }} />}
     <h2>Evidencias</h2><Evidence audio={report.audio} photos={report.photos || []} />

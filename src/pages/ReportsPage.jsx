@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { getCurrentReporterId, getReports, resolveIncident, setReportSeverity } from '../services/reportRepository.js';
 import { resolveReportsListTracking } from '../services/consolidatedTracking.js';
 import { endorsementCount, isActiveReport, priorityInfo, severityLevels, sortReceptionReports } from '../services/reportPriority.js';
@@ -25,6 +25,8 @@ function formatDateTime(value) {
 }
 
 export default function ReportsPage({ reception = false }) {
+  const location = useLocation();
+  const accessDeniedReason = !reception ? location.state?.accessDeniedReason || '' : '';
   const [reports, setReports] = useState([]);
   const [ticketQuery, setTicketQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -166,6 +168,7 @@ export default function ReportsPage({ reception = false }) {
 
   return <section>
     <h1>{reception ? 'Recepción de reportes' : 'Mis reportes'}</h1>
+    {accessDeniedReason && <p className="error-message" role="alert">{accessDeniedReason}</p>}
     {!reception && reports.length > 0 && <label className="ticket-search-box">
       Consultar por número de ticket
       <input type="search" placeholder="Ejemplo: RC-..." value={ticketQuery}
