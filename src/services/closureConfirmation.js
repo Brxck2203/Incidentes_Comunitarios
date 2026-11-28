@@ -213,6 +213,13 @@ export function applySolutionConfirmation(report, options = {}) {
   });
 }
 
+function isAuthorizedCitizen(report, reporterId) {
+  if (typeof reporterId !== 'string' || !reporterId.trim()) return false;
+  if (report.reporterId === reporterId) return true;
+  return Array.isArray(report.confirmations)
+    && report.confirmations.some((confirmation) => confirmation?.reporterId === reporterId);
+}
+
 /**
  * Persiste la confirmación ciudadana de solución en IndexedDB v2.
  * Si se invoca con un ticket secundario consolidado, aplica la confirmación sobre su expediente maestro.
@@ -276,6 +283,9 @@ export async function confirmClosureSolution(ticket, options = {}) {
           const current = request.result;
           if (!current) {
             throw new Error('El reporte solicitado no existe.');
+          }
+          if (!isAuthorizedCitizen(current, options.reporterId)) {
+            throw new Error('Solo la persona reportante o quienes confirmaron este incidente pueden confirmar la solución.');
           }
           if (!isSecondaryReport(current)) {
             const updated = applySolutionConfirmation(current, options);

@@ -59,8 +59,21 @@ test('HU-25: flujo completo con HU-15, HU-18 y HU-21 persiste en IndexedDB v2 el
   assert.equal(beforeConfirmCert.hasClosurePhoto, true);
   assert.match(beforeConfirmCert.technicalNote, /losa de concreto/);
 
+  await assert.rejects(
+    () =>
+      confirmClosureSolution(closedOrder.ticket, {
+        now: twentyFourHoursLater,
+        reporterId: 'ciudadano-ajeno',
+      }),
+    /Solo la persona reportante o quienes confirmaron/i,
+  );
+  const unchanged = await getReport(closedOrder.ticket);
+  assert.equal(unchanged.status, ATTENDED_STATUS);
+  assert.equal(Boolean(unchanged.closureArchived), false);
+
   const confirmed = await confirmClosureSolution(closedOrder.ticket, {
     now: thirtyHoursLater,
+    reporterId: 'ciudadano-hu25',
   });
 
   assert.equal(confirmed.status, ARCHIVED_CLOSURE_STATUS);
@@ -80,6 +93,7 @@ test('HU-25: flujo completo con HU-15, HU-18 y HU-21 persiste en IndexedDB v2 el
 test('HU-25: confirmClosureSolution rechaza confirmar fuera del plazo configurado o en reportes abiertos sin alterar IndexedDB', async () => {
   const attendedRecord = {
     ...original,
+    reporterId: original.reporterId || 'ciudadano-demo',
     status: ATTENDED_STATUS,
     closure: {
       closedAt: '2026-11-10T08:00:00.000Z',
@@ -96,6 +110,7 @@ test('HU-25: confirmClosureSolution rechaza confirmar fuera del plazo configurad
     () =>
       confirmClosureSolution(attendedRecord.ticket, {
         now: '2026-11-15T08:00:00.000Z',
+        reporterId: attendedRecord.reporterId,
       }),
     /plazo de 72 horas para confirmar la solución ya expiró/i,
   );

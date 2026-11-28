@@ -44,3 +44,6 @@ Poner a disposición del ciudadano la constancia oficial de cierre cuando su inc
 ## Límites e integración
 
 El prototipo opera localmente sobre IndexedDB v2 sin backend ni envío de correos electrónicos: «enviar al ciudadano el comprobante digital» se implementa haciendo disponible la constancia oficial de cierre en la vista de detalle del ticket (`/reportes/:ticket`). No implementa el reporte de inconformidad (HU-26).
+
+- Confirmar la solución desde un ticket secundario consolidado archiva el expediente maestro para todos los tickets unidos.
+- La identidad del ciudadano corresponde al identificador local del navegador (`reporterId`), no a una cuenta autenticada.

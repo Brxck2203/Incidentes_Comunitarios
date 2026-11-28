@@ -14,6 +14,8 @@ function formatDateTime(value) {
 export default function ClosureCertificatePanel({
   report,
   municipalView = false,
+  canConfirm = false,
+  reporterId,
   confirmationHours,
   onConfirmed,
 }) {
@@ -26,13 +28,16 @@ export default function ClosureCertificatePanel({
   if (!certificate) return null;
 
   async function handleConfirmSolution() {
-    if (busyRef.current || !certificate.canConfirmSolution) return;
+    if (busyRef.current || !canConfirm || !certificate.canConfirmSolution) return;
     busyRef.current = true;
     setBusy(true);
     setError('');
     setMessage('');
     try {
-      const updated = await confirmClosureSolution(report.ticket, { confirmationHours });
+      const updated = await confirmClosureSolution(report.ticket, {
+        reporterId,
+        confirmationHours,
+      });
       onConfirmed?.(updated);
       setMessage('Solución confirmada. El expediente ha quedado archivado definitivamente.');
     } catch (failure) {
@@ -50,7 +55,7 @@ export default function ClosureCertificatePanel({
     >
       <div className="closure-certificate-header">
         <span className="closure-certificate-badge">
-          {certificate.isArchived ? 'Expediente archivado' : 'Constancia oficial de cierre'}
+          {certificate.isConfirmedByCitizen ? 'Expediente archivado' : 'Constancia oficial de cierre'}
         </span>
         <h2 id="closure-certificate-title">
           Comprobante digital de atención y cierre del incidente
@@ -115,12 +120,12 @@ export default function ClosureCertificatePanel({
 
       {!certificate.isConfirmedByCitizen && certificate.windowExpired && (
         <p className="closure-expired-notice" role="status">
-          El plazo de {certificate.confirmationWindowHours} horas para validación ciudadana expiró y el expediente
-          quedó archivado por vencimiento del plazo.
+          El plazo de {certificate.confirmationWindowHours} horas para validar la solución venció; ya no es posible
+          confirmarla.
         </p>
       )}
 
-      {!municipalView && certificate.canConfirmSolution && (
+      {!municipalView && canConfirm && certificate.canConfirmSolution && (
         <div className="closure-confirmation-actions">
           <p>
             Si la atención realizada solucionó el problema de forma satisfactoria, puedes confirmar la solución dentro

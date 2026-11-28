@@ -192,6 +192,12 @@ export default function ReportDetailPage() {
   const effectiveReportIsActive = !tracking?.masterUnavailable
     && isActiveReport({ ...report, status: tracking?.effectiveStatus ?? report.status });
   const masterTicket = report.masterTicket || report.consolidation?.masterTicket;
+  const canConfirm = Boolean(
+    viewerId && (
+      report.reporterId === viewerId ||
+      report.confirmations?.some((confirmation) => confirmation.reporterId === viewerId)
+    ),
+  );
   return <section>
     <Link className="text-link" to={fromReception ? '/recepcion' : '/reportes'}>
       {fromReception ? 'Volver a recepción de reportes' : 'Volver a mis reportes'}
@@ -261,6 +267,8 @@ export default function ReportDetailPage() {
           }
         : report}
       municipalView={fromReception}
+      canConfirm={canConfirm}
+      reporterId={viewerId}
       onConfirmed={(updated) => {
         if (currentTicketRef.current === updated.ticket) {
           setReport(updated);
