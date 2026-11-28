@@ -110,6 +110,18 @@ export function resolveReportTracking(report, reportsByTicket = {}) {
     .map(sanitizeMasterHistoryEntry)
     .filter(Boolean);
 
+  const rawMasterClosure = masterReport.technicalClosure || masterReport.closure || null;
+  const effectiveClosure = rawMasterClosure && typeof rawMasterClosure === 'object'
+    ? {
+        at: rawMasterClosure.at || rawMasterClosure.closedAt || rawMasterClosure.attendedAt || null,
+        closedAt: rawMasterClosure.closedAt || rawMasterClosure.at || null,
+        department: rawMasterClosure.department || masterReport.assignment?.department || '',
+        crewName: rawMasterClosure.crewName || rawMasterClosure.crew || masterReport.assignment?.crewName || masterReport.assignment?.crew || '',
+        note: rawMasterClosure.note || rawMasterClosure.technicalNote || '',
+        photos: Array.isArray(rawMasterClosure.photos) ? rawMasterClosure.photos : [],
+      }
+    : null;
+
   return {
     ticket: report.ticket,
     isConsolidatedSecondary: true,
@@ -121,6 +133,9 @@ export function resolveReportTracking(report, reportsByTicket = {}) {
     effectiveUpdatedAt: masterReport.updatedAt,
     effectiveCategory: masterReport.category || report.category,
     effectiveDecision: toPublicMunicipalDecision(masterReport.municipalDecision),
+    effectiveClosure,
+    effectiveClosureArchived: Boolean(masterReport.closureArchived),
+    effectiveSolutionConfirmedAt: masterReport.solutionConfirmedAt || null,
     consolidatedAt: report.consolidation?.consolidatedAt ?? report.updatedAt,
     masterProgressHistory,
   };
